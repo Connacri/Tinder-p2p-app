@@ -246,7 +246,7 @@ jobs:
           COLORS
 
       # ============================================================
-      # 5. FICHIERS GRADLE
+      # 5. FICHIERS GRADLE (CORRIGÉ)
       # ============================================================
       - name: 📝 Créer les fichiers Gradle
         run: |
@@ -260,7 +260,11 @@ jobs:
           plugins { id 'com.android.application' version '8.1.4' apply false }
           GRADLE
           
-          VCODE=$(echo $VERSION | sed 's/v//' | tr -d '.')
+          # 🔧 CORRECTION: Supprimer les zéros initiaux du versionCode
+          VCODE=$(echo $VERSION | sed 's/v//' | tr -d '.' | sed 's/^0*//')
+          if [ -z "$VCODE" ]; then VCODE="1"; fi
+          echo "📱 Version: $VERSION | VersionCode: $VCODE"
+          
           STORE_PASS="${KEYSTORE_PASSWORD:-android123}"
           KEY_ALIAS="${KEY_ALIAS:-tinderp2p}"
           KEY_PASS="${KEY_PASSWORD:-android123}"
@@ -274,8 +278,8 @@ jobs:
                   applicationId "com.connacri.tinderp2p"
                   minSdk 21
                   targetSdk 34
-                  versionCode ${VCODE:-1}
-                  versionName "${VERSION:-v1.0.0}"
+                  versionCode ${VCODE}
+                  versionName "${VERSION}"
               }
               signingConfigs {
                   release {
