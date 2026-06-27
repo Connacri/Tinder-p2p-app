@@ -1,4 +1,4 @@
-name: Build APK & Release
+name: Build APK & Release Signée
 
 on:
   push:
@@ -24,7 +24,7 @@ permissions:
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
-    
+
     steps:
       # ============================================================
       # 1. CHECKOUT + VERSION
@@ -33,16 +33,30 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      
-      - name: 🔢 Générer la version
+          fetch-tags: true
+
+      - name: 🔢 Générer la version (sans conflit de tag)
         id: version
         run: |
-          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
-          echo "Dernier tag: $LAST_TAG"
+          # Récupérer tous les tags et les trier
+          git fetch --tags
           
+          # Trouver le dernier tag qui correspond au pattern v*.*.*
+          LAST_TAG=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1)
+          
+          if [ -z "$LAST_TAG" ]; then
+            echo "Aucun tag trouvé, démarrage à v0.0.1"
+            LAST_TAG="v0.0.0"
+          else
+            echo "Dernier tag trouvé: $LAST_TAG"
+          fi
+          
+          # Extraire les numéros de version
           MAJOR=$(echo $LAST_TAG | sed 's/v//' | cut -d. -f1)
           MINOR=$(echo $LAST_TAG | sed 's/v//' | cut -d. -f2)
           PATCH=$(echo $LAST_TAG | sed 's/v//' | cut -d. -f3)
+          
+          echo "Version actuelle: $MAJOR.$MINOR.$PATCH"
           
           BUMP_TYPE="${{ inputs.version_bump || 'patch' }}"
           
@@ -53,10 +67,18 @@ jobs:
           esac
           
           NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
+          
+          # Vérifier que le tag n'existe PAS déjà
+          while git rev-parse "$NEW_VERSION" >/dev/null 2>&1; do
+            echo "⚠️ Le tag $NEW_VERSION existe déjà, incrémentation..."
+            PATCH=$((PATCH + 1))
+            NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
+          done
+          
+          echo "✅ Version finale: $NEW_VERSION"
           echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "VERSION=$NEW_VERSION" >> $GITHUB_ENV
-          echo "✅ Nouvelle version: $NEW_VERSION"
-      
+
       # ============================================================
       # 2. SETUP JAVA + ANDROID SDK
       # ============================================================
@@ -65,7 +87,7 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
-      
+
       - name: 📦 Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
@@ -75,24 +97,31 @@ jobs:
       # ============================================================
       # 3. KEYSTORE
       # ============================================================
-      - name: 🔑 Générer le keystore
+      - name: 🔐 Restaurer le keystore de release
         run: |
-          keytool -genkey -v \
-            -keystore release.keystore \
-            -alias tinderp2p \
-            -storepass android123 \
-            -keypass android123 \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -dname "CN=Connacri, OU=Dev, O=TinderP2P, L=Paris, ST=France, C=FR"
-      
+          if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            echo "✅ Keystore trouvé dans les secrets"
+            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > release.keystore
+            echo "✅ Keystore restauré"
+          else
+            echo "⚠️ Pas de keystore, création d'un keystore debug"
+            keytool -genkey -v \
+              -keystore release.keystore \
+              -alias tinderp2p \
+              -storepass android123 \
+              -keypass android123 \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Debug, OU=Dev, O=TinderP2P, L=Paris, ST=France, C=FR"
+            echo "⚠️ APK signé avec une clé debug"
+          fi
+
       # ============================================================
       # 4. PROJET ANDROID + ICÔNE
       # ============================================================
       - name: 🏗️ Créer le projet Android
         run: |
-          # Dossiers
           mkdir -p app/src/main/java/com/connacri/tinderp2p
           mkdir -p app/src/main/res/values
           mkdir -p app/src/main/res/mipmap-mdpi
@@ -101,37 +130,26 @@ jobs:
           mkdir -p app/src/main/res/mipmap-xxhdpi
           mkdir -p app/src/main/res/mipmap-xxxhdpi
           
-          # ----------------------------------------------------------
-          # ICÔNE - Redimensionnement depuis assets/icon-512.png
-          # ----------------------------------------------------------
+          # ICÔNE
           python3 << 'PYTHON'
-          import os, sys
-
+          import os
           icon_source = 'assets/icon-512.png'
-          sizes = {
-              'mdpi': 48, 'hdpi': 72, 'xhdpi': 96,
-              'xxhdpi': 144, 'xxxhdpi': 192
-          }
-
+          sizes = {'mdpi': 48, 'hdpi': 72, 'xhdpi': 96, 'xxhdpi': 144, 'xxxhdpi': 192}
           if os.path.exists(icon_source):
-              print("✅ Icône trouvée: assets/icon-512.png")
+              print("✅ Icône trouvée")
               try:
                   from PIL import Image
                   img = Image.open(icon_source)
                   for density, size in sizes.items():
                       resized = img.resize((size, size), Image.LANCZOS)
-                      path = f'app/src/main/res/mipmap-{density}/ic_launcher.png'
-                      resized.save(path, 'PNG')
+                      resized.save(f'app/src/main/res/mipmap-{density}/ic_launcher.png', 'PNG')
                       print(f"  ✅ {density}: {size}x{size}px")
-                  print("✅ Icônes redimensionnées avec succès")
               except ImportError:
-                  print("⚠️ PIL non disponible, fallback...")
                   import shutil
                   for density in sizes:
                       shutil.copy(icon_source, f'app/src/main/res/mipmap-{density}/ic_launcher.png')
-                  print("✅ Icône copiée (taille originale)")
           else:
-              print("⚠️ Icône non trouvée, création d'une icône par défaut")
+              print("⚠️ Icône par défaut")
               import struct, zlib
               def create_png(w, h, color):
                   def chunk(t, d):
@@ -142,20 +160,13 @@ jobs:
                       raw += b'\x00'
                       for x in range(w):
                           raw += struct.pack('BBB', *color)
-                  return b'\x89PNG\r\n\x1a\n' + \
-                         chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0)) + \
-                         chunk(b'IDAT', zlib.compress(raw)) + \
-                         chunk(b'IEND', b'')
+                  return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b'')
               for density, size in sizes.items():
-                  png = create_png(size, size, (26, 115, 232))
                   with open(f'app/src/main/res/mipmap-{density}/ic_launcher.png', 'wb') as f:
-                      f.write(png)
-              print("✅ Icônes par défaut créées")
+                      f.write(create_png(size, size, (26, 115, 232)))
           PYTHON
           
-          # ----------------------------------------------------------
-          # AndroidManifest.xml
-          # ----------------------------------------------------------
+          # AndroidManifest
           cat > app/src/main/AndroidManifest.xml << 'MANIFEST'
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
@@ -179,9 +190,7 @@ jobs:
           </manifest>
           MANIFEST
           
-          # ----------------------------------------------------------
-          # MainActivity.java
-          # ----------------------------------------------------------
+          # MainActivity
           cat > app/src/main/java/com/connacri/tinderp2p/MainActivity.java << 'JAVA'
           package com.connacri.tinderp2p;
           import android.app.Activity;
@@ -215,9 +224,7 @@ jobs:
           }
           JAVA
           
-          # ----------------------------------------------------------
           # Styles
-          # ----------------------------------------------------------
           cat > app/src/main/res/values/styles.xml << 'STYLES'
           <?xml version="1.0" encoding="utf-8"?>
           <resources>
@@ -229,9 +236,6 @@ jobs:
           </resources>
           STYLES
           
-          # ----------------------------------------------------------
-          # Colors
-          # ----------------------------------------------------------
           cat > app/src/main/res/values/colors.xml << 'COLORS'
           <?xml version="1.0" encoding="utf-8"?>
           <resources>
@@ -240,7 +244,7 @@ jobs:
               <color name="colorAccent">#1a73e8</color>
           </resources>
           COLORS
-      
+
       # ============================================================
       # 5. FICHIERS GRADLE
       # ============================================================
@@ -257,6 +261,10 @@ jobs:
           GRADLE
           
           VCODE=$(echo $VERSION | sed 's/v//' | tr -d '.')
+          STORE_PASS="${KEYSTORE_PASSWORD:-android123}"
+          KEY_ALIAS="${KEY_ALIAS:-tinderp2p}"
+          KEY_PASS="${KEY_PASSWORD:-android123}"
+          
           cat > app/build.gradle << GRADLE
           plugins { id 'com.android.application' }
           android {
@@ -270,10 +278,23 @@ jobs:
                   versionName "${VERSION:-v1.0.0}"
               }
               signingConfigs {
-                  release { storeFile file("../release.keystore"); storePassword "android123"; keyAlias "tinderp2p"; keyPassword "android123" }
+                  release {
+                      storeFile file("../release.keystore")
+                      storePassword "${STORE_PASS}"
+                      keyAlias "${KEY_ALIAS}"
+                      keyPassword "${KEY_PASS}"
+                  }
               }
-              buildTypes { release { minifyEnabled false; signingConfig signingConfigs.release } }
-              compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+              buildTypes {
+                  release {
+                      minifyEnabled false
+                      signingConfig signingConfigs.release
+                  }
+              }
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
           }
           dependencies { implementation 'androidx.appcompat:appcompat:1.6.1' }
           GRADLE
@@ -283,7 +304,11 @@ jobs:
           android.useAndroidX=true
           android.nonTransitiveRClass=true
           PROPS
-      
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+
       # ============================================================
       # 6. BUILD
       # ============================================================
@@ -292,28 +317,36 @@ jobs:
           wget -q https://services.gradle.org/distributions/gradle-8.2-bin.zip
           unzip -q gradle-8.2-bin.zip
           echo "$PWD/gradle-8.2/bin" >> $GITHUB_PATH
-      
-      - name: 🔨 Builder l'APK
+
+      - name: 🔨 Builder l'APK signé
         run: |
           gradle wrapper --gradle-version 8.2
           ./gradlew assembleRelease --no-daemon
-      
+
       # ============================================================
-      # 7. RENOMMER + RELEASE
+      # 7. RELEASE
       # ============================================================
-      - name: 📋 Préparer l'APK
+      - name: 📋 Préparer la release
         run: |
           mkdir -p release
           cp app/build/outputs/apk/release/app-release.apk "release/Tinder-P2P-${VERSION}.apk"
           ls -lh release/
-      
-      - name: 🏷️ Créer le tag Git
+
+      - name: 🏷️ Créer et pusher le tag
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a $VERSION -m "Release $VERSION"
-          git push origin $VERSION
-      
+          
+          # Vérifier une dernière fois que le tag n'existe pas
+          if git rev-parse "$VERSION" >/dev/null 2>&1; then
+            echo "❌ ERREUR: Le tag $VERSION existe déjà"
+            exit 1
+          fi
+          
+          git tag -a "$VERSION" -m "Release $VERSION"
+          git push origin "$VERSION"
+          echo "✅ Tag $VERSION créé et pushé"
+
       - name: 🚀 Créer la Release GitHub
         uses: softprops/action-gh-release@v2
         with:
@@ -323,7 +356,7 @@ jobs:
             ## 📱 Tinder P2P - ${{ env.VERSION }}
             
             ### 📥 Téléchargement
-            - **[⬇️ Télécharger l'APK](https://github.com/Connacri/Tinder-p2p-app/releases/download/${{ env.VERSION }}/Tinder-P2P-${{ env.VERSION }}.apk)**
+            - **[⬇️ Télécharger l'APK signé](https://github.com/Connacri/Tinder-p2p-app/releases/download/${{ env.VERSION }}/Tinder-P2P-${{ env.VERSION }}.apk)**
             
             ### 🌐 Version Web
             - [Ouvrir dans le navigateur](https://connacri.github.io/Tinder-p2p-app/)
@@ -337,13 +370,13 @@ jobs:
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      
+
       # ============================================================
-      # 8. ARTEFACT (téléchargement direct)
+      # 8. ARTEFACT
       # ============================================================
       - name: 📤 Upload APK (artefact)
         uses: actions/upload-artifact@v4
         with:
-          name: Tinder-P2P-${{ env.VERSION }}
+          name: Tinder-P2P-${{ env.VERSION }}-signed
           path: release/*.apk
-          retention-days: 30
+          retention-days: 90
