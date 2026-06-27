@@ -1,0 +1,21 @@
+[app]
+name = "Tinder P2P"
+packageId = "com.connacri.tinderp2p"
+displayMode = "standalone"
+backgroundColor = "#f0f2f5"
+themeColor = "#1a73e8"
+startUrl = "https://connacri.github.io/Tinder-p2p-app/"
+
+[android]
+minSdkVersion = 21
+targetSdkVersion = 33
+compileSdkVersion = 33
+
+[signing]
+keystore = "debug.keystore"
+keystorePassword = "android"
+keyAlias = "androiddebugkey"
+keyPassword = "android"
+
+[icons]
+icon = "assets/icon-512.png"
