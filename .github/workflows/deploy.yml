@@ -28,10 +28,6 @@ jobs:
           sdk-version: 34
           build-tools-version: 34.0.0
 
-      - name: 📥 Install SDK packages
-        run: |
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" "build-tools;34.0.0" 2>/dev/null || true
-      
       - name: 🔑 Generate keystore
         run: |
           keytool -genkey -v \
@@ -54,18 +50,14 @@ jobs:
           cat > app/src/main/AndroidManifest.xml << 'MANIFEST'
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              
               <uses-permission android:name="android.permission.INTERNET" />
               <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-              
               <application
                   android:allowBackup="true"
                   android:icon="@mipmap/ic_launcher"
                   android:label="Tinder P2P"
                   android:theme="@style/Theme.AppCompat.NoActionBar"
-                  android:usesCleartextTraffic="true"
-                  android:supportsRtl="true">
-                  
+                  android:usesCleartextTraffic="true">
                   <activity
                       android:name=".MainActivity"
                       android:exported="true"
@@ -108,10 +100,8 @@ jobs:
                   settings.setAllowFileAccess(true);
                   settings.setMediaPlaybackRequiresUserGesture(false);
                   settings.setAllowContentAccess(true);
-                  settings.setAllowUniversalAccessFromFileURLs(true);
                   
                   webView.loadUrl("https://connacri.github.io/Tinder-p2p-app/");
-                  
                   setContentView(webView);
               }
               
@@ -145,50 +135,48 @@ jobs:
               <color name="colorPrimary">#1a73e8</color>
               <color name="colorPrimaryDark">#1557b0</color>
               <color name="colorAccent">#1a73e8</color>
-              <color name="white">#FFFFFF</color>
-              <color name="black">#000000</color>
           </resources>
           COLORS
+
+          # Icône placeholder
+          cat > app/src/main/res/mipmap-hdpi/ic_launcher.xml << 'ICON'
+          <?xml version="1.0" encoding="utf-8"?>
+          <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+              <background android:drawable="@color/colorPrimary"/>
+              <foreground android:drawable="@color/colorPrimaryDark"/>
+          </adaptive-icon>
+          ICON
       
-      - name: 📝 Create Gradle files (COMPATIBLE VERSION)
+      - name: 📝 Create Gradle files
         run: |
-          # Gradle wrapper properties - Version 8.2 stable
-          mkdir -p gradle/wrapper
-          cat > gradle/wrapper/gradle-wrapper.properties << 'PROPS'
-          distributionBase=GRADLE_USER_HOME
-          distributionPath=wrapper/dists
-          distributionUrl=https\://services.gradle.org/distributions/gradle-8.2-bin.zip
-          networkTimeout=10000
-          validateDistributionUrl=true
-          zipStoreBase=GRADLE_USER_HOME
-          zipStorePath=wrapper/dists
-          PROPS
+          # settings.gradle
+          cat > settings.gradle << 'GRADLE'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "TinderP2P"
+          include ':app'
+          GRADLE
           
-          # Root build.gradle - Compatible syntax
+          # Root build.gradle
           cat > build.gradle << 'GRADLE'
-          buildscript {
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-              dependencies {
-                  classpath 'com.android.tools.build:gradle:8.1.4'
-              }
-          }
-          
-          allprojects {
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-          }
-          
-          tasks.register('clean', Delete) {
-              delete rootProject.layout.buildDirectory
+          plugins {
+              id 'com.android.application' version '8.1.4' apply false
           }
           GRADLE
           
-          # App build.gradle - Syntaxe corrigée
+          # App build.gradle
           cat > app/build.gradle << 'GRADLE'
           plugins {
               id 'com.android.application'
@@ -220,9 +208,6 @@ jobs:
                       minifyEnabled false
                       signingConfig signingConfigs.release
                   }
-                  debug {
-                      signingConfig signingConfigs.release
-                  }
               }
               
               compileOptions {
@@ -236,28 +221,6 @@ jobs:
           }
           GRADLE
           
-          # settings.gradle
-          cat > settings.gradle << 'GRADLE'
-          pluginManagement {
-              repositories {
-                  google()
-                  mavenCentral()
-                  gradlePluginPortal()
-              }
-          }
-          
-          dependencyResolutionManagement {
-              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-          }
-          
-          rootProject.name = "TinderP2P"
-          include ':app'
-          GRADLE
-          
           # gradle.properties
           cat > gradle.properties << 'PROPS'
           org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
@@ -265,21 +228,18 @@ jobs:
           android.nonTransitiveRClass=true
           PROPS
       
-      - name: 📦 Download Gradle wrapper
+      - name: 🔨 Setup Gradle wrapper
         run: |
-          # Télécharger le gradle-wrapper.jar
-          wget -q https://raw.githubusercontent.com/gradle/gradle/v8.2.0/gradle/wrapper/gradle-wrapper.jar -O gradle/wrapper/gradle-wrapper.jar
+          # Utiliser gradle pour générer le wrapper
+          gradle wrapper --gradle-version 8.2
           
-          # Rendre exécutable
-          chmod +x gradlew 2>/dev/null || true
+          # Vérifier
+          ls -la gradlew
+          ls -la gradle/wrapper/
       
-      - name: 🔨 Build APK
+      - name: 🏗️ Build APK
         run: |
-          # Générer le wrapper
-          gradle wrapper --gradle-version 8.2 2>/dev/null || true
-          
-          # Build avec stacktrace pour debug
-          ./gradlew assembleRelease --stacktrace --no-daemon
+          ./gradlew assembleRelease --no-daemon --stacktrace
       
       - name: 📋 Find APK
         run: |
@@ -288,7 +248,7 @@ jobs:
           find . -name "*.apk" -type f -exec ls -lh {} \;
           echo "===================="
       
-      - name: 📤 Upload APK
+      - name: 📤 Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: Tinder-P2P-APK
@@ -297,12 +257,11 @@ jobs:
             app/build/outputs/apk/debug/*.apk
           retention-days: 30
       
-      - name: 🚀 Create Release
+      - name: 🚀 Create Release (on tag)
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/v')
         with:
-          files: |
-            app/build/outputs/apk/release/*.apk
+          files: app/build/outputs/apk/release/*.apk
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
