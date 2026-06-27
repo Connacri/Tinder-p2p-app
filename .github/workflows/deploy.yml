@@ -1,20 +1,74 @@
-name: Build APK Android
+name: Build APK & Release
 
 on:
   push:
     branches: [main, master]
+    paths-ignore:
+      - 'README.md'
+      - '.gitignore'
   workflow_dispatch:
+    inputs:
+      version_bump:
+        description: 'Type de version'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
 
 permissions:
   contents: write
 
 jobs:
-  build-apk:
+  build-and-release:
     runs-on: ubuntu-latest
+    
+    outputs:
+      version: ${{ steps.version.outputs.new_version }}
     
     steps:
       - name: 📥 Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: 🔢 Generate version
+        id: version
+        run: |
+          # Récupérer le dernier tag
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "Dernier tag: $LAST_TAG"
+          
+          # Extraire les numéros
+          MAJOR=$(echo $LAST_TAG | sed 's/v//' | cut -d. -f1)
+          MINOR=$(echo $LAST_TAG | sed 's/v//' | cut -d. -f2)
+          PATCH=$(echo $LAST_TAG | sed 's/v//' | cut -d. -f3)
+          
+          BUMP_TYPE="${{ inputs.version_bump || 'patch' }}"
+          
+          case $BUMP_TYPE in
+            major)
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+              ;;
+            minor)
+              MINOR=$((MINOR + 1))
+              PATCH=0
+              ;;
+            patch)
+              PATCH=$((PATCH + 1))
+              ;;
+          esac
+          
+          NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
+          echo "Nouvelle version: $NEW_VERSION"
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          
+          # Sauvegarder pour usage ultérieur
+          echo "VERSION=$NEW_VERSION" >> $GITHUB_ENV
       
       - name: 🔧 Setup Java 17
         uses: actions/setup-java@v4
@@ -75,7 +129,6 @@ jobs:
           import android.webkit.WebViewClient;
           import android.webkit.WebSettings;
           import android.webkit.WebChromeClient;
-          
           public class MainActivity extends Activity {
               private WebView webView;
               @Override
@@ -114,38 +167,19 @@ jobs:
       
       - name: 📝 Create Gradle files
         run: |
-          # settings.gradle
           cat > settings.gradle << 'GRADLE'
-          pluginManagement {
-              repositories {
-                  google()
-                  mavenCentral()
-                  gradlePluginPortal()
-              }
-          }
-          dependencyResolutionManagement {
-              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-          }
-          rootProject.name = "TinderP2P"
-          include ':app'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+          rootProject.name = "TinderP2P"; include ':app'
           GRADLE
           
-          # Root build.gradle
           cat > build.gradle << 'GRADLE'
-          plugins {
-              id 'com.android.application' version '8.1.4' apply false
-          }
+          plugins { id 'com.android.application' version '8.1.4' apply false }
           GRADLE
           
-          # App build.gradle
-          cat > app/build.gradle << 'GRADLE'
-          plugins {
-              id 'com.android.application'
-          }
+          VCODE=$(echo $VERSION | sed 's/v//' | tr -d '.')
+          cat > app/build.gradle << GRADLE
+          plugins { id 'com.android.application' }
           android {
               namespace 'com.connacri.tinderp2p'
               compileSdk 34
@@ -153,83 +187,79 @@ jobs:
                   applicationId "com.connacri.tinderp2p"
                   minSdk 21
                   targetSdk 34
-                  versionCode 1
-                  versionName "1.0.0"
+                  versionCode ${VCODE:-1}
+                  versionName "${VERSION:-v1.0.0}"
               }
               signingConfigs {
-                  release {
-                      storeFile file("../release.keystore")
-                      storePassword "android123"
-                      keyAlias "tinderp2p"
-                      keyPassword "android123"
-                  }
+                  release { storeFile file("../release.keystore"); storePassword "android123"; keyAlias "tinderp2p"; keyPassword "android123" }
               }
-              buildTypes {
-                  release {
-                      minifyEnabled false
-                      signingConfig signingConfigs.release
-                  }
-              }
-              compileOptions {
-                  sourceCompatibility JavaVersion.VERSION_17
-                  targetCompatibility JavaVersion.VERSION_17
-              }
+              buildTypes { release { minifyEnabled false; signingConfig signingConfigs.release } }
+              compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
           }
-          dependencies {
-              implementation 'androidx.appcompat:appcompat:1.6.1'
-          }
+          dependencies { implementation 'androidx.appcompat:appcompat:1.6.1' }
           GRADLE
           
-          # gradle.properties
           cat > gradle.properties << 'PROPS'
           org.gradle.jvmargs=-Xmx2048m
           android.useAndroidX=true
-          android.nonTransitiveRClass=true
           PROPS
       
       - name: 📥 Download Gradle 8.2
         run: |
-          # Télécharger Gradle 8.2 directement
           wget -q https://services.gradle.org/distributions/gradle-8.2-bin.zip
           unzip -q gradle-8.2-bin.zip
-          
-          # Remplacer le gradle système
-          echo "GRADLE_HOME=$PWD/gradle-8.2" >> $GITHUB_ENV
           echo "$PWD/gradle-8.2/bin" >> $GITHUB_PATH
-          
-          # Vérifier la version
-          $PWD/gradle-8.2/bin/gradle --version
       
-      - name: 🔨 Generate wrapper and build
+      - name: 🔨 Build APK
         run: |
-          # Générer le wrapper avec Gradle 8.2
           gradle wrapper --gradle-version 8.2
-          
-          # Vérifier que gradlew existe
-          ls -la gradlew
-          
-          # Build l'APK
           ./gradlew assembleRelease --no-daemon
       
-      - name: 📋 Find APK
+      - name: 📋 Rename APK
         run: |
-          echo "===================="
-          find . -name "*.apk" -type f -exec ls -lh {} \;
-          echo "===================="
+          mkdir -p release
+          cp app/build/outputs/apk/release/app-release.apk "release/Tinder-P2P-${VERSION}.apk"
+          ls -lh release/
       
-      - name: 📤 Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: Tinder-P2P-APK
-          path: |
-            app/build/outputs/apk/release/*.apk
-            app/build/outputs/apk/debug/*.apk
-          retention-days: 30
+      - name: 🏷️ Create Git Tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a $VERSION -m "Release $VERSION"
+          git push origin $VERSION
       
-      - name: 🚀 Create Release
+      - name: 🚀 Create GitHub Release
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/v')
         with:
-          files: app/build/outputs/apk/release/*.apk
+          tag_name: ${{ env.VERSION }}
+          name: "🔥 Tinder P2P ${{ env.VERSION }}"
+          body: |
+            ## 📱 Tinder P2P - ${{ env.VERSION }}
+            
+            ### 📥 Téléchargement
+            - **[⬇️ Télécharger l'APK](https://github.com/Connacri/Tinder-p2p-app/releases/download/${{ env.VERSION }}/Tinder-P2P-${{ env.VERSION }}.apk)**
+            
+            ### 🌐 Version Web
+            - [Ouvrir dans le navigateur](https://connacri.github.io/Tinder-p2p-app/)
+            
+            ### 🔧 Changements
+            - Version ${{ env.VERSION }}
+            - APK Android avec WebView
+            - PWA avec P2P réel (Bugout)
+            
+            ### 📱 Installation
+            1. Télécharge l'APK
+            2. Ouvre le fichier
+            3. Accepte "Sources inconnues"
+            4. Profite !
+          files: release/*.apk
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: 📤 Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Tinder-P2P-${{ env.VERSION }}
+          path: release/*.apk
+          retention-days: 30
