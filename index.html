@@ -2,127 +2,308 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
     <meta name="theme-color" content="#FF4458">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <title>🔥 Tinder P2P – ID & Découverte</title>
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Tinder P2P">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔥</text></svg>">
+    <title>🔥 Tinder P2P</title>
     <style>
         :root {
             --primary: #FF4458;
-            --primary-light: #FF6B6B;
+            --primary-dark: #E53945;
+            --secondary: #FF6B6B;
             --success: #00D46A;
+            --warning: #FFD700;
             --bg: #F8F9FA;
             --surface: #FFFFFF;
-            --text: #1C1C1E;
-            --text-secondary: #636366;
-            --border: #E5E5EA;
-            --radius: 16px;
-            --shadow: 0 4px 16px rgba(0,0,0,0.08);
+            --text: #2D3436;
+            --text-secondary: #636E72;
+            --border: #E9ECEF;
+            --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
+            --shadow-md: 0 4px 12px rgba(0,0,0,0.1);
+            --shadow-lg: 0 8px 24px rgba(0,0,0,0.12);
+            --radius-sm: 8px;
+            --radius-md: 16px;
+            --radius-lg: 24px;
+            --radius-xl: 32px;
+            --safe-bottom: env(safe-area-inset-bottom, 0px);
         }
-        * { margin:0; padding:0; box-sizing:border-box; }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #121212;
+                --surface: #1E1E1E;
+                --text: #FFFFFF;
+                --text-secondary: #B0B0B0;
+                --border: #2C2C2E;
+                --shadow-sm: 0 1px 3px rgba(0,0,0,0.4);
+                --shadow-md: 0 4px 12px rgba(0,0,0,0.5);
+                --shadow-lg: 0 8px 24px rgba(0,0,0,0.6);
+            }
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: var(--bg);
             color: var(--text);
             height: 100dvh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            overflow: hidden;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            line-height: 1.5;
         }
         #app {
-            width: 100%;
-            max-width: 480px;
-            height: 100dvh;
             display: flex;
             flex-direction: column;
+            height: 100dvh;
+            max-width: 480px;
+            margin: 0 auto;
             background: var(--bg);
-            box-shadow: var(--shadow);
-            overflow: hidden;
+            box-shadow: var(--shadow-lg);
+            position: relative;
         }
         nav {
             display: flex;
-            background: rgba(255,255,255,0.9);
-            backdrop-filter: blur(20px);
+            background: var(--surface);
             border-top: 1px solid var(--border);
-            padding: 8px 16px calc(8px + env(safe-area-inset-bottom));
+            padding: 8px 12px calc(8px + var(--safe-bottom));
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            max-width: 480px;
+            z-index: 100;
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            background: rgba(var(--surface-rgb, 255,255,255), 0.9);
         }
         nav button {
-            flex:1;
-            background:none;
-            border:none;
-            font-size:22px;
-            cursor:pointer;
+            flex: 1;
+            background: none;
+            border: none;
+            padding: 8px 4px;
+            font-size: 22px;
+            cursor: pointer;
+            border-radius: var(--radius-md);
             color: var(--text-secondary);
             display: flex;
             flex-direction: column;
             align-items: center;
             gap: 4px;
-            border-radius: 12px;
-            padding: 8px;
+            transition: all 0.2s ease;
         }
-        nav button.active { color: var(--primary); background: rgba(255,68,88,0.1); }
-        .screen { display:none; flex:1; overflow-y:auto; padding:20px; flex-direction:column; }
-        .screen.active { display:flex; }
+        nav button.active {
+            color: var(--primary);
+            background: rgba(255, 68, 88, 0.15);
+        }
+        .screen {
+            display: none;
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px 16px 90px;
+            flex-direction: column;
+        }
+        .screen.active { display: flex; }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--surface);
+            padding: 16px 20px;
+            border-radius: var(--radius-lg);
+            margin-bottom: 20px;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border);
+        }
+        .header h2 { font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
         .btn {
-            padding: 12px 20px;
-            border-radius: 100px;
-            font-weight: 600;
+            padding: 10px 20px;
             border: none;
-            cursor: pointer;
+            border-radius: var(--radius-xl);
             font-size: 14px;
-            color: white;
-            background: var(--primary);
+            font-weight: 600;
+            cursor: pointer;
+            color: #fff;
             transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
-        .btn:active { transform: scale(0.97); }
-        .btn-success { background: var(--success); }
+        .btn:active { transform: scale(0.96); }
+        .btn-primary { background: linear-gradient(135deg, #FF4458, #FF6B6B); }
+        .btn-success { background: linear-gradient(135deg, #00D46A, #00B359); }
         .btn-ghost {
             background: transparent;
             color: var(--primary);
-            border: 1.5px solid var(--primary);
+            border: 2px solid var(--primary);
         }
+        .input-group { margin-bottom: 16px; }
         .input-field {
             width: 100%;
             padding: 14px 16px;
-            border: 1.5px solid var(--border);
-            border-radius: 12px;
+            border: 2px solid var(--border);
+            border-radius: var(--radius-md);
             font-size: 15px;
             background: var(--surface);
-            margin-bottom: 12px;
+            color: var(--text);
+            font-family: inherit;
+            transition: all 0.2s;
         }
-        .id-box {
-            background: var(--surface);
-            border-radius: var(--radius);
-            padding: 20px;
-            margin-top: 20px;
-            text-align: center;
-            border: 1px solid var(--border);
+        .input-field:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(255,68,88,0.2);
         }
-        .id-value {
-            font-family: monospace;
-            word-break: break-all;
-            background: var(--bg);
-            padding: 12px;
-            border-radius: 8px;
-            margin: 8px 0;
+        .profile-img-container {
+            position: relative;
+            width: 140px;
+            height: 140px;
+            margin: 20px auto;
         }
-        .profile-avatar {
-            width: 120px; height:120px; border-radius:50%; background: linear-gradient(135deg, #5856D6, #FF4458);
-            display: flex; align-items:center; justify-content:center; font-size:48px; margin: 0 auto 20px;
+        .profile-img {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 56px;
+            border: 4px solid var(--surface);
+            box-shadow: var(--shadow-md);
+        }
+        .profile-img-overlay {
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            background: var(--primary);
+            color: white;
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: var(--shadow-md);
+            font-size: 18px;
         }
         .card {
             background: var(--surface);
-            border-radius: var(--radius);
+            border-radius: var(--radius-lg);
             padding: 16px;
             margin-bottom: 12px;
+            box-shadow: var(--shadow-sm);
             border: 1px solid var(--border);
             display: flex;
             align-items: center;
             gap: 12px;
         }
         .card-avatar {
-            width: 48px; height:48px; border-radius:50%; background: linear-gradient(135deg, #5856D6, #FF4458);
-            display: flex; align-items:center; justify-content:center; font-size:24px;
+            width: 52px;
+            height: 52px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            flex-shrink: 0;
+        }
+        .card-info { flex: 1; min-width: 0; }
+        .card-info h3 { font-size: 16px; font-weight: 600; }
+        .card-info p {
+            font-size: 13px;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .id-box {
+            background: var(--surface);
+            padding: 20px;
+            border-radius: var(--radius-lg);
+            margin-top: 20px;
+            border: 1px solid var(--border);
+            text-align: center;
+        }
+        .id-value {
+            font-family: 'SF Mono', 'Cascadia Code', monospace;
+            font-size: 13px;
+            word-break: break-all;
+            background: var(--bg);
+            padding: 12px;
+            border-radius: var(--radius-md);
+            margin: 12px 0;
+            border: 1px solid var(--border);
+            user-select: all;
+        }
+        .chat-overlay {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: var(--bg);
+            z-index: 200;
+            display: none;
+            flex-direction: column;
+            max-width: 480px;
+            margin: 0 auto;
+            right: 0;
+        }
+        .chat-overlay.active { display: flex; }
+        .chat-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 16px;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+        }
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .message {
+            max-width: 75%;
+            padding: 10px 14px;
+            border-radius: 18px;
+            font-size: 15px;
+            animation: slideUp 0.3s ease;
+        }
+        .message.sent {
+            align-self: flex-end;
+            background: linear-gradient(135deg, #FF4458, #FF6B6B);
+            color: #fff;
+            border-bottom-right-radius: 4px;
+        }
+        .message.received {
+            align-self: flex-start;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-bottom-left-radius: 4px;
+        }
+        .message time { font-size: 11px; opacity: 0.7; display: block; margin-top: 4px; }
+        .chat-input-bar {
+            display: flex;
+            gap: 8px;
+            padding: 12px 16px calc(12px + var(--safe-bottom));
+            background: var(--surface);
+            border-top: 1px solid var(--border);
+        }
+        .chat-input-bar input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid var(--border);
+            border-radius: var(--radius-xl);
+            font-size: 15px;
+            background: var(--bg);
+            color: var(--text);
+            font-family: inherit;
         }
         .toast {
             position: fixed;
@@ -132,401 +313,446 @@
             background: rgba(0,0,0,0.85);
             color: white;
             padding: 12px 24px;
-            border-radius: 100px;
+            border-radius: 50px;
             font-size: 14px;
             z-index: 999;
-            animation: slideDown 0.3s ease;
+            animation: toastIn 0.3s ease;
+            backdrop-filter: blur(12px);
         }
-        @keyframes slideDown { from{opacity:0;transform:translate(-50%,-20px);} }
+        @keyframes toastIn {
+            from { opacity: 0; transform: translate(-50%, -20px); }
+            to { opacity: 1; transform: translate(-50%, 0); }
+        }
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .empty-state {
+            text-align: center;
+            color: var(--text-secondary);
+            padding: 60px 20px;
+        }
     </style>
 </head>
 <body>
-<div id="app">
-    <!-- Profil -->
-    <section id="screen-profile" class="screen active">
-        <h2 style="margin-bottom:20px;">👤 Mon Profil</h2>
-        <div class="profile-avatar" id="profile-avatar">😊</div>
-        <button class="btn" id="btn-change-avatar" style="margin-bottom:16px;">📷 Changer avatar</button>
-        <input class="input-field" id="input-name" placeholder="Ton prénom" maxlength="30">
-        <textarea class="input-field" id="input-bio" placeholder="Ta bio..." rows="2" maxlength="150"></textarea>
-        <button class="btn" id="btn-save-profile" style="width:100%;">💾 Sauvegarder</button>
-        <div class="id-box">
-            <strong>🔑 Ton ID unique</strong>
-            <div class="id-value" id="display-peer-id">⏳ Génération en cours...</div>
-            <div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
-                <button class="btn btn-ghost" id="btn-copy-id">📋 Copier</button>
-                <button class="btn btn-ghost" id="btn-share-id">📤 Partager</button>
-                <button class="btn btn-ghost" id="btn-regenerate-id">🔄 Régénérer</button>
+    <div id="app">
+        <!-- Profil -->
+        <section id="screen-profile" class="screen active">
+            <div class="header">
+                <h2>👤 Mon Profil</h2>
+                <span style="color:var(--success);font-weight:600;" id="profile-status">🟢 En ligne</span>
             </div>
-            <p style="margin-top:8px; font-size:12px; color:var(--text-secondary);" id="network-status"></p>
-        </div>
-    </section>
+            <div class="profile-img-container">
+                <div class="profile-img" id="profile-avatar">😊</div>
+                <div class="profile-img-overlay" id="btn-change-avatar">📷</div>
+            </div>
+            <div class="input-group">
+                <input class="input-field" id="input-name" placeholder="Ton prénom" maxlength="30">
+            </div>
+            <div class="input-group">
+                <textarea class="input-field" id="input-bio" placeholder="Ta bio..." rows="2" maxlength="150"></textarea>
+            </div>
+            <button class="btn btn-primary" id="btn-save-profile" style="width:100%;">💾 Sauvegarder</button>
+            <div class="id-box">
+                <strong>🔑 Ton ID unique</strong>
+                <div class="id-value" id="display-peer-id">⏳ Initialisation...</div>
+                <div style="display:flex; gap:8px; justify-content:center; margin-top:12px;">
+                    <button class="btn btn-ghost" id="btn-copy-id">📋 Copier</button>
+                    <button class="btn btn-ghost" id="btn-share-id">📤 Partager</button>
+                    <button class="btn btn-ghost" id="btn-regenerate-id">🔄 Régénérer</button>
+                </div>
+                <p style="margin-top:8px; font-size:12px; color:var(--text-secondary);" id="network-status"></p>
+            </div>
+        </section>
 
-    <!-- Découvrir -->
-    <section id="screen-discover" class="screen">
-        <h2 style="margin-bottom:20px;">🔍 Découvrir</h2>
-        <button class="btn btn-success" id="btn-toggle-discover" style="margin-bottom:16px;">Découverte : OFF</button>
-        <input class="input-field" id="input-peer-id" placeholder="Colle un ID ici...">
-        <button class="btn" id="btn-connect" style="width:100%; margin-bottom:20px;">🔗 Se connecter</button>
-        <div id="discover-list"></div>
-    </section>
+        <!-- Découvrir -->
+        <section id="screen-discover" class="screen">
+            <div class="header">
+                <h2>🔍 Découvrir</h2>
+                <button class="btn btn-success" id="btn-toggle-discover">OFF</button>
+            </div>
+            <div class="input-group">
+                <input class="input-field" id="input-peer-id" placeholder="Colle l'ID d'un profil ici...">
+            </div>
+            <button class="btn btn-primary" id="btn-connect" style="width:100%; margin-bottom:20px;">🔗 Se connecter</button>
+            <div id="discover-list"></div>
+        </section>
 
-    <!-- Matchs -->
-    <section id="screen-matches" class="screen">
-        <h2 style="margin-bottom:20px;">💝 Mes Matchs</h2>
-        <div id="matches-list"></div>
-    </section>
+        <!-- Matchs -->
+        <section id="screen-matches" class="screen">
+            <div class="header">
+                <h2>💝 Mes Matchs</h2>
+            </div>
+            <div id="matches-list"></div>
+        </section>
 
-    <!-- Chat overlay -->
-    <div id="chat-overlay" style="display:none; position:fixed; inset:0; background:var(--bg); z-index:200; flex-direction:column;">
-        <div style="display:flex; align-items:center; padding:16px; border-bottom:1px solid var(--border);">
-            <button id="btn-close-chat" class="btn btn-ghost" style="margin-right:12px;">← Retour</button>
-            <h3 id="chat-peer-name">Chat</h3>
+        <!-- Chat overlay -->
+        <div id="chat-overlay" class="chat-overlay">
+            <div class="chat-header">
+                <button class="btn btn-ghost" id="btn-close-chat" style="padding:8px 12px;">← Retour</button>
+                <h3 id="chat-peer-name">Chat</h3>
+            </div>
+            <div class="chat-messages" id="chat-messages"></div>
+            <div class="chat-input-bar">
+                <input type="text" id="input-message" placeholder="Écris un message..." maxlength="500">
+                <button class="btn btn-primary" id="btn-send" style="padding:12px 16px;">➤</button>
+            </div>
         </div>
-        <div id="chat-messages" style="flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:8px;"></div>
-        <div style="display:flex; gap:8px; padding:12px; border-top:1px solid var(--border);">
-            <input id="input-message" class="input-field" placeholder="Message..." style="flex:1; margin:0;">
-            <button id="btn-send" class="btn">➤</button>
-        </div>
+
+        <!-- Navigation -->
+        <nav>
+            <button class="active" data-screen="profile">👤<small>Profil</small></button>
+            <button data-screen="discover">🔍<small>Découvrir</small></button>
+            <button data-screen="matches">💝<small>Matchs</small></button>
+        </nav>
     </div>
 
-    <nav>
-        <button class="active" data-screen="profile">👤 Profil</button>
-        <button data-screen="discover">🔍 Découvrir</button>
-        <button data-screen="matches">💝 Matchs</button>
-    </nav>
-</div>
-
-<script src="https://cdn.jsdelivr.net/npm/bugout@0.0.10/index.js"></script>
-<script>
-    // ===== ÉTAT =====
-    const STATE = {
-        myPeerId: null,
-        profile: JSON.parse(localStorage.getItem('p2p_profile') || '{"name":"","bio":"","avatar":"😊"}'),
-        isDiscoverable: false,
-        matches: JSON.parse(localStorage.getItem('p2p_matches') || '{}'),
-        currentChatPeer: null,
-        bugout: null,
-        seenPeers: new Set()
-    };
-
-    const $ = (s) => document.querySelector(s);
-    const $$ = (s) => document.querySelectorAll(s);
-
-    function toast(msg) {
-        const t = document.createElement('div');
-        t.className = 'toast';
-        t.textContent = msg;
-        document.body.appendChild(t);
-        setTimeout(() => t.remove(), 3000);
-    }
-
-    // ===== PROFIL =====
-    function loadProfileUI() {
-        $('#input-name').value = STATE.profile.name;
-        $('#input-bio').value = STATE.profile.bio;
-        $('#profile-avatar').textContent = STATE.profile.avatar;
-    }
-
-    $('#btn-save-profile').addEventListener('click', () => {
-        STATE.profile.name = $('#input-name').value.trim();
-        STATE.profile.bio = $('#input-bio').value.trim();
-        if (!STATE.profile.name) return toast('⚠️ Entre un prénom');
-        localStorage.setItem('p2p_profile', JSON.stringify(STATE.profile));
-        toast('✅ Profil sauvegardé');
-    });
-
-    const avatars = ['😊','😎','🥳','🤩','😇','🦊','🐱','🐶','🦄','🐼','🌸','🔥','💎','🍕','🎸','⚽'];
-    $('#btn-change-avatar').addEventListener('click', () => {
-        const idx = avatars.indexOf(STATE.profile.avatar);
-        STATE.profile.avatar = avatars[(idx + 1) % avatars.length];
-        $('#profile-avatar').textContent = STATE.profile.avatar;
-    });
-
-    // ===== IDENTIFIANT UNIQUE =====
-    function generateFallbackId() {
-        return 'local-' + Math.random().toString(36).substr(2, 9) + '-' + Date.now().toString(36);
-    }
-
-    async function initBugout() {
-        $('#network-status').textContent = '🔵 Connexion au réseau P2P...';
-        if (typeof Bugout === 'undefined') {
-            throw new Error('Bibliothèque Bugout manquante');
-        }
-        STATE.bugout = new Bugout();
-        return new Promise((resolve, reject) => {
-            let attempts = 0;
-            const maxAttempts = 30; // 3 secondes max
-            const check = setInterval(() => {
-                const addr = STATE.bugout.address();
-                if (addr) {
-                    clearInterval(check);
-                    STATE.myPeerId = addr;
-                    $('#display-peer-id').textContent = addr;
-                    $('#network-status').textContent = '🟢 Connecté (P2P)';
-                    setupNetworkListeners();
-                    resolve(addr);
-                }
-                attempts++;
-                if (attempts >= maxAttempts) {
-                    clearInterval(check);
-                    // Fallback : générer un ID local
-                    const fallback = generateFallbackId();
-                    STATE.myPeerId = fallback;
-                    $('#display-peer-id').textContent = fallback;
-                    $('#network-status').textContent = '🟠 Mode local (WebRTC non disponible)';
-                    console.warn('Bugout n’a pas fourni d’adresse, fallback ID:', fallback);
-                    setupFallbackListeners();
-                    resolve(fallback);
-                }
-            }, 100);
-        });
-    }
-
-    function setupNetworkListeners() {
-        if (!STATE.bugout) return;
-        STATE.bugout.on('seen', (addr) => {
-            if (addr !== STATE.myPeerId && !STATE.seenPeers.has(addr)) {
-                STATE.seenPeers.add(addr);
-                console.log('👀 Nouveau pair vu:', addr);
-                // Découverte automatique : si on est découvrable, on envoie un ping
-                if (STATE.isDiscoverable) {
-                    STATE.bugout.send(addr, { type: 'ping', profile: STATE.profile });
-                    toast(`🔍 Tentative de connexion avec un nouveau pair...`);
-                }
-            }
-        });
-        STATE.bugout.on('message', (addr, data) => {
-            if (!data || typeof data !== 'object') return;
-            if (data.type === 'ping' && STATE.isDiscoverable) {
-                STATE.bugout.send(addr, { type: 'pong', profile: STATE.profile });
-                addOrUpdateMatch(addr, data.profile);
-                toast(`💌 ${data.profile.name || 'Quelqu’un'} t’a trouvé !`);
-            } else if (data.type === 'pong') {
-                addOrUpdateMatch(addr, data.profile);
-                toast(`🎉 Profil trouvé !`);
-            } else if (data.type === 'message' && data.text) {
-                receiveMessage(addr, data.text);
-            }
-        });
-    }
-
-    function setupFallbackListeners() {
-        console.log('Mode fallback – connexion manuelle uniquement');
-    }
-
-    $('#btn-regenerate-id').addEventListener('click', async () => {
-        if (STATE.bugout) {
-            try { STATE.bugout.destroy?.(); } catch(e) {}
-        }
-        STATE.myPeerId = null;
-        STATE.seenPeers.clear();
-        $('#display-peer-id').textContent = '⏳ Régénération...';
-        await initBugout();
-        toast('✅ Nouvel ID généré');
-    });
-
-    // ===== DÉCOUVRABILITÉ =====
-    $('#btn-toggle-discover').addEventListener('click', () => {
-        STATE.isDiscoverable = !STATE.isDiscoverable;
-        const btn = $('#btn-toggle-discover');
-        btn.textContent = `Découverte : ${STATE.isDiscoverable ? 'ON' : 'OFF'}`;
-        btn.className = `btn ${STATE.isDiscoverable ? 'btn-success' : ''}`;
-        toast(STATE.isDiscoverable ? '📡 Tu es visible !' : '🔒 Tu es invisible.');
-    });
-
-    // ===== CONNEXION MANUELLE =====
-    $('#btn-connect').addEventListener('click', () => {
-        const peerId = $('#input-peer-id').value.trim();
-        if (!peerId) return toast('⚠️ Entre un ID');
-        if (peerId === STATE.myPeerId) return toast('⚠️ C’est ton propre ID');
-        if (STATE.matches[peerId]) return toast('💬 Déjà en contact');
-        if (!STATE.bugout) return toast('❌ Pas de connexion réseau');
-        STATE.bugout.send(peerId, { type: 'ping', profile: STATE.profile });
-        toast('🔍 Recherche...');
-        setTimeout(() => {
-            if (!STATE.matches[peerId]) toast('❌ Personne trouvée avec cet ID');
-        }, 8000);
-    });
-
-    // ===== GESTION DES MATCHS =====
-    function addOrUpdateMatch(peerId, profile) {
-        if (!STATE.matches[peerId]) {
-            STATE.matches[peerId] = {
-                name: profile.name || 'Anonyme',
-                bio: profile.bio || '',
-                avatar: profile.avatar || '😊',
-                messages: [],
-                starred: false,
-                unread: 0,
-                lastActivity: Date.now()
+    <script src="https://cdn.jsdelivr.net/npm/bugout@0.0.10/index.js"></script>
+    <script>
+        (function() {
+            // ========== ÉTAT ==========
+            const STATE = {
+                myPeerId: null,
+                profile: JSON.parse(localStorage.getItem('p2p_profile') || '{"name":"","bio":"","avatar":"😊"}'),
+                isDiscoverable: false,
+                matches: JSON.parse(localStorage.getItem('p2p_matches') || '{}'),
+                currentChatPeer: null,
+                bugout: null,
+                seenPeers: new Set()
             };
-        } else {
-            Object.assign(STATE.matches[peerId], {
-                name: profile.name || STATE.matches[peerId].name,
-                bio: profile.bio || STATE.matches[peerId].bio,
-                avatar: profile.avatar || STATE.matches[peerId].avatar,
-                lastActivity: Date.now()
+
+            // ========== UTILITAIRES ==========
+            const $ = (s) => document.querySelector(s);
+            const $$ = (s) => document.querySelectorAll(s);
+            const toast = (msg) => {
+                const t = document.createElement('div');
+                t.className = 'toast';
+                t.textContent = msg;
+                document.body.appendChild(t);
+                setTimeout(() => t.remove(), 3000);
+            };
+
+            // ========== PROFIL UI ==========
+            function loadProfileUI() {
+                $('#input-name').value = STATE.profile.name;
+                $('#input-bio').value = STATE.profile.bio;
+                $('#profile-avatar').textContent = STATE.profile.avatar;
+            }
+
+            $('#btn-save-profile').addEventListener('click', () => {
+                STATE.profile.name = $('#input-name').value.trim();
+                STATE.profile.bio = $('#input-bio').value.trim();
+                if (!STATE.profile.name) return toast('⚠️ Entre un prénom');
+                localStorage.setItem('p2p_profile', JSON.stringify(STATE.profile));
+                toast('✅ Profil sauvegardé');
             });
-        }
-        saveMatches();
-        renderMatches();
-        renderDiscover();
-    }
 
-    function saveMatches() {
-        localStorage.setItem('p2p_matches', JSON.stringify(STATE.matches));
-    }
+            const avatars = ['😊','😎','🥳','🤩','😇','🦊','🐱','🐶','🦄','🐼','🌸','🔥','💎','🍕','🎸','⚽'];
+            $('#btn-change-avatar').addEventListener('click', () => {
+                const idx = avatars.indexOf(STATE.profile.avatar);
+                STATE.profile.avatar = avatars[(idx + 1) % avatars.length];
+                $('#profile-avatar').textContent = STATE.profile.avatar;
+                toast('Avatar changé');
+            });
 
-    function renderMatches() {
-        const container = $('#matches-list');
-        const ids = Object.keys(STATE.matches);
-        if (ids.length === 0) {
-            container.innerHTML = '<p style="text-align:center;color:gray;">💔 Aucun match</p>';
-            return;
-        }
-        container.innerHTML = ids.map(id => {
-            const m = STATE.matches[id];
-            const lastMsg = m.messages.length ? m.messages[m.messages.length-1].text : 'Pas de messages';
-            return `
-            <div class="card">
-                <div class="card-avatar">${m.avatar}</div>
-                <div style="flex:1;">
-                    <strong>${m.name} ${m.starred ? '⭐' : ''}</strong>
-                    <p style="font-size:13px;color:gray;">${lastMsg.substring(0,40)}</p>
-                </div>
-                <button class="btn" data-peer="${id}" onclick="openChat('${id}')">💬</button>
-            </div>`;
-        }).join('');
-    }
+            // ========== IDENTIFIANT UNIQUE ==========
+            function generateFallbackId() {
+                return 'local-' + Math.random().toString(36).substr(2, 9) + '-' + Date.now().toString(36);
+            }
 
-    function renderDiscover() {
-        const container = $('#discover-list');
-        const ids = Object.keys(STATE.matches);
-        if (ids.length === 0) {
-            container.innerHTML = '<p style="text-align:center;color:gray;">🔍 Aucun profil découvert</p>';
-            return;
-        }
-        container.innerHTML = ids.map(id => {
-            const m = STATE.matches[id];
-            return `
-            <div class="card">
-                <div class="card-avatar">${m.avatar}</div>
-                <div style="flex:1;">
-                    <strong>${m.name}</strong>
-                    <p style="font-size:13px;">${m.bio || 'Pas de bio'}</p>
-                </div>
-                <button class="btn" onclick="openChat('${id}')">💬</button>
-            </div>`;
-        }).join('');
-    }
+            async function initBugout() {
+                $('#network-status').textContent = '🔵 Connexion au réseau P2P...';
+                if (typeof Bugout === 'undefined') {
+                    throw new Error('Bugout non chargé');
+                }
+                STATE.bugout = new Bugout();
+                return new Promise((resolve, reject) => {
+                    let attempts = 0;
+                    const maxAttempts = 30; // 3 secondes
+                    const check = setInterval(() => {
+                        const addr = STATE.bugout.address();
+                        if (addr) {
+                            clearInterval(check);
+                            STATE.myPeerId = addr;
+                            $('#display-peer-id').textContent = addr;
+                            $('#network-status').textContent = '🟢 Connecté (P2P)';
+                            setupNetworkListeners();
+                            resolve(addr);
+                        }
+                        attempts++;
+                        if (attempts >= maxAttempts) {
+                            clearInterval(check);
+                            const fallback = generateFallbackId();
+                            STATE.myPeerId = fallback;
+                            $('#display-peer-id').textContent = fallback;
+                            $('#network-status').textContent = '🟠 Mode local (WebRTC indisponible)';
+                            console.warn('Fallback ID utilisé');
+                            setupFallbackListeners();
+                            resolve(fallback);
+                        }
+                    }, 100);
+                });
+            }
 
-    // ===== CHAT =====
-    function openChat(peerId) {
-        STATE.currentChatPeer = peerId;
-        const m = STATE.matches[peerId];
-        $('#chat-peer-name').textContent = m.name || 'Anonyme';
-        $('#chat-messages').innerHTML = m.messages.map(msg => {
-            const cls = msg.sent ? 'sent' : 'received';
-            const bg = msg.sent ? 'background:#FF4458;color:white;align-self:flex-end;' : 'background:white;border:1px solid #ddd;';
-            return `<div style="padding:10px 14px;border-radius:18px;margin:4px 0;max-width:75%;${bg}">${msg.text}<br><small>${msg.time}</small></div>`;
-        }).join('');
-        document.getElementById('chat-overlay').style.display = 'flex';
-        $('#input-message').focus();
-        if (m.unread) {
-            m.unread = 0;
-            saveMatches();
-        }
-    }
+            function setupNetworkListeners() {
+                if (!STATE.bugout) return;
+                STATE.bugout.on('seen', (addr) => {
+                    if (addr !== STATE.myPeerId && !STATE.seenPeers.has(addr)) {
+                        STATE.seenPeers.add(addr);
+                        console.log('👀 Vu:', addr);
+                        if (STATE.isDiscoverable) {
+                            STATE.bugout.send(addr, { type: 'ping', profile: STATE.profile });
+                            toast(`🔍 Tentative de connexion automatique...`);
+                        }
+                    }
+                });
+                STATE.bugout.on('message', (addr, data) => {
+                    if (!data || typeof data !== 'object') return;
+                    if (data.type === 'ping' && STATE.isDiscoverable) {
+                        STATE.bugout.send(addr, { type: 'pong', profile: STATE.profile });
+                        addOrUpdateMatch(addr, data.profile);
+                        toast(`💌 ${data.profile.name || 'Quelqu\'un'} t'a trouvé !`);
+                    } else if (data.type === 'pong') {
+                        addOrUpdateMatch(addr, data.profile);
+                        toast(`🎉 Profil trouvé !`);
+                    } else if (data.type === 'message' && data.text) {
+                        receiveMessage(addr, data.text);
+                    }
+                });
+            }
 
-    function closeChat() {
-        document.getElementById('chat-overlay').style.display = 'none';
-        STATE.currentChatPeer = null;
-        renderMatches();
-    }
+            function setupFallbackListeners() {
+                console.log('Mode fallback : connexion manuelle uniquement');
+            }
 
-    $('#btn-close-chat').addEventListener('click', closeChat);
+            $('#btn-regenerate-id').addEventListener('click', async () => {
+                if (STATE.bugout) {
+                    try { STATE.bugout.destroy?.(); } catch(e) {}
+                }
+                STATE.myPeerId = null;
+                STATE.seenPeers.clear();
+                $('#display-peer-id').textContent = '⏳ Régénération...';
+                await initBugout();
+                toast('✅ Nouvel ID généré');
+            });
 
-    $('#btn-send').addEventListener('click', sendMessage);
-    $('#input-message').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') sendMessage();
-    });
+            // ========== DÉCOUVRABILITÉ ==========
+            $('#btn-toggle-discover').addEventListener('click', () => {
+                STATE.isDiscoverable = !STATE.isDiscoverable;
+                const btn = $('#btn-toggle-discover');
+                btn.textContent = STATE.isDiscoverable ? 'ON' : 'OFF';
+                btn.className = `btn ${STATE.isDiscoverable ? 'btn-success' : ''}`;
+                toast(STATE.isDiscoverable ? '📡 Tu es visible !' : '🔒 Tu es invisible.');
+            });
 
-    function sendMessage() {
-        const text = $('#input-message').value.trim();
-        if (!text || !STATE.currentChatPeer) return;
-        const msg = { text, time: new Date().toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'}), sent: true };
-        STATE.matches[STATE.currentChatPeer].messages.push(msg);
-        saveMatches();
-        $('#chat-messages').innerHTML += `<div style="padding:10px 14px;border-radius:18px;margin:4px 0;max-width:75%;background:#FF4458;color:white;align-self:flex-end;">${text}<br><small>${msg.time}</small></div>`;
-        $('#input-message').value = '';
-        $('#chat-messages').scrollTop = $('#chat-messages').scrollHeight;
-        if (STATE.bugout) {
-            STATE.bugout.send(STATE.currentChatPeer, { type: 'message', text });
-        }
-    }
+            // ========== CONNEXION MANUELLE ==========
+            $('#btn-connect').addEventListener('click', () => {
+                const peerId = $('#input-peer-id').value.trim();
+                if (!peerId) return toast('⚠️ Entre un ID');
+                if (peerId === STATE.myPeerId) return toast('⚠️ C\'est ton ID');
+                if (STATE.matches[peerId]) return toast('💬 Déjà en contact');
+                if (!STATE.bugout) return toast('❌ Pas de connexion réseau');
+                STATE.bugout.send(peerId, { type: 'ping', profile: STATE.profile });
+                toast('🔍 Recherche...');
+                setTimeout(() => {
+                    if (!STATE.matches[peerId]) toast('❌ Personne trouvée avec cet ID');
+                }, 8000);
+            });
 
-    function receiveMessage(peerId, text) {
-        const msg = { text, time: new Date().toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'}), sent: false };
-        if (!STATE.matches[peerId]) return;
-        STATE.matches[peerId].messages.push(msg);
-        STATE.matches[peerId].unread = (STATE.matches[peerId].unread || 0) + 1;
-        saveMatches();
-        if (STATE.currentChatPeer === peerId) {
-            $('#chat-messages').innerHTML += `<div style="padding:10px 14px;border-radius:18px;margin:4px 0;max-width:75%;background:white;border:1px solid #ddd;">${text}<br><small>${msg.time}</small></div>`;
-            $('#chat-messages').scrollTop = $('#chat-messages').scrollHeight;
-            STATE.matches[peerId].unread = 0;
-            saveMatches();
-        } else {
-            toast(`📩 Nouveau message de ${STATE.matches[peerId].name}`);
-        }
-    }
+            // ========== MATCHS ==========
+            function addOrUpdateMatch(peerId, profile) {
+                if (!STATE.matches[peerId]) {
+                    STATE.matches[peerId] = {
+                        name: profile.name || 'Anonyme',
+                        bio: profile.bio || '',
+                        avatar: profile.avatar || '😊',
+                        messages: [],
+                        starred: false,
+                        unread: 0,
+                        lastActivity: Date.now()
+                    };
+                } else {
+                    Object.assign(STATE.matches[peerId], {
+                        name: profile.name || STATE.matches[peerId].name,
+                        bio: profile.bio || STATE.matches[peerId].bio,
+                        avatar: profile.avatar || STATE.matches[peerId].avatar,
+                        lastActivity: Date.now()
+                    });
+                }
+                saveMatches();
+                renderMatches();
+                renderDiscover();
+            }
 
-    // ===== ID COPY / SHARE =====
-    $('#btn-copy-id').addEventListener('click', () => {
-        if (!STATE.myPeerId) return;
-        navigator.clipboard.writeText(STATE.myPeerId)
-            .then(() => toast('📋 ID copié'))
-            .catch(() => toast('❌ Erreur de copie'));
-    });
+            function saveMatches() {
+                localStorage.setItem('p2p_matches', JSON.stringify(STATE.matches));
+            }
 
-    $('#btn-share-id').addEventListener('click', () => {
-        if (!STATE.myPeerId) return;
-        if (navigator.share) {
-            navigator.share({ title: 'Mon ID Tinder P2P', text: STATE.myPeerId })
-                .catch(() => {});
-        } else {
-            navigator.clipboard.writeText(STATE.myPeerId)
-                .then(() => toast('📋 ID copié (partage non supporté)'))
-                .catch(() => toast('❌ Erreur'));
-        }
-    });
+            function renderMatches() {
+                const container = $('#matches-list');
+                const ids = Object.keys(STATE.matches);
+                if (ids.length === 0) {
+                    container.innerHTML = '<div class="empty-state">💔 Aucun match pour le moment.<br>Va dans "Découvrir" !</div>';
+                    return;
+                }
+                container.innerHTML = ids.map(id => {
+                    const m = STATE.matches[id];
+                    const lastMsg = m.messages.length ? m.messages[m.messages.length-1].text : 'Pas encore de messages';
+                    return `
+                    <div class="card">
+                        <div class="card-avatar">${m.avatar}</div>
+                        <div class="card-info">
+                            <h3>${m.name} ${m.starred ? '⭐' : ''}</h3>
+                            <p>${lastMsg}</p>
+                        </div>
+                        <button class="btn btn-primary" style="padding:8px 16px;" data-peer="${id}">💬</button>
+                    </div>`;
+                }).join('');
+                // Attacher les événements
+                container.querySelectorAll('.btn-primary').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        openChat(btn.dataset.peer);
+                    });
+                });
+            }
 
-    // ===== NAVIGATION =====
-    $$('nav button').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const screen = btn.dataset.screen;
-            $$('nav button').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            $$('.screen').forEach(s => s.classList.remove('active'));
-            $(`#screen-${screen}`).classList.add('active');
-            if (screen === 'matches') renderMatches();
-            if (screen === 'discover') renderDiscover();
-        });
-    });
+            function renderDiscover() {
+                const container = $('#discover-list');
+                const ids = Object.keys(STATE.matches);
+                if (ids.length === 0) {
+                    container.innerHTML = '<div class="empty-state">🔍 Aucun profil découvert.<br>Active la découverte ou entre un ID manuellement.</div>';
+                    return;
+                }
+                container.innerHTML = ids.map(id => {
+                    const m = STATE.matches[id];
+                    return `
+                    <div class="card">
+                        <div class="card-avatar">${m.avatar}</div>
+                        <div class="card-info">
+                            <h3>${m.name}</h3>
+                            <p>${m.bio || 'Pas de bio'}</p>
+                        </div>
+                        <button class="btn btn-primary" style="padding:8px 16px;" data-peer="${id}">💬</button>
+                    </div>`;
+                }).join('');
+                container.querySelectorAll('.btn-primary').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        openChat(btn.dataset.peer);
+                    });
+                });
+            }
 
-    // ===== INITIALISATION =====
-    (async () => {
-        loadProfileUI();
-        try {
-            await initBugout();
-        } catch(e) {
-            console.error(e);
-            $('#display-peer-id').textContent = '❌ Erreur critique';
-            $('#network-status').textContent = '🔴 Échec de connexion';
-        }
-        renderMatches();
-    })();
-</script>
+            // ========== CHAT ==========
+            function openChat(peerId) {
+                STATE.currentChatPeer = peerId;
+                const m = STATE.matches[peerId];
+                if (!m) return;
+                $('#chat-peer-name').textContent = m.name || 'Anonyme';
+                const chatMsgs = $('#chat-messages');
+                chatMsgs.innerHTML = m.messages.map(msg => {
+                    const cls = msg.sent ? 'sent' : 'received';
+                    return `<div class="message ${cls}">${escapeHtml(msg.text)}<time>${msg.time || ''}</time></div>`;
+                }).join('');
+                document.getElementById('chat-overlay').classList.add('active');
+                chatMsgs.scrollTop = chatMsgs.scrollHeight;
+                if (m.unread) {
+                    m.unread = 0;
+                    saveMatches();
+                }
+            }
+
+            function closeChat() {
+                document.getElementById('chat-overlay').classList.remove('active');
+                STATE.currentChatPeer = null;
+                renderMatches();
+            }
+
+            $('#btn-close-chat').addEventListener('click', closeChat);
+            $('#btn-send').addEventListener('click', sendMessage);
+            $('#input-message').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') sendMessage();
+            });
+
+            function sendMessage() {
+                const text = $('#input-message').value.trim();
+                if (!text || !STATE.currentChatPeer) return;
+                const msg = { text, time: new Date().toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' }), sent: true };
+                STATE.matches[STATE.currentChatPeer].messages.push(msg);
+                saveMatches();
+                const chatMsgs = $('#chat-messages');
+                chatMsgs.innerHTML += `<div class="message sent">${escapeHtml(text)}<time>${msg.time}</time></div>`;
+                $('#input-message').value = '';
+                chatMsgs.scrollTop = chatMsgs.scrollHeight;
+                if (STATE.bugout) {
+                    STATE.bugout.send(STATE.currentChatPeer, { type: 'message', text });
+                }
+            }
+
+            function receiveMessage(peerId, text) {
+                if (!STATE.matches[peerId]) return;
+                const msg = { text, time: new Date().toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' }), sent: false };
+                STATE.matches[peerId].messages.push(msg);
+                STATE.matches[peerId].unread = (STATE.matches[peerId].unread || 0) + 1;
+                saveMatches();
+                if (STATE.currentChatPeer === peerId) {
+                    const chatMsgs = $('#chat-messages');
+                    chatMsgs.innerHTML += `<div class="message received">${escapeHtml(text)}<time>${msg.time}</time></div>`;
+                    chatMsgs.scrollTop = chatMsgs.scrollHeight;
+                    STATE.matches[peerId].unread = 0;
+                    saveMatches();
+                } else {
+                    toast(`📩 Nouveau message de ${STATE.matches[peerId].name}`);
+                }
+            }
+
+            function escapeHtml(text) {
+                return String(text).replace(/[&<>"']/g, function(m) {
+                    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m];
+                });
+            }
+
+            // ========== ID COPIE/PARTAGE ==========
+            $('#btn-copy-id').addEventListener('click', () => {
+                if (!STATE.myPeerId) return;
+                navigator.clipboard.writeText(STATE.myPeerId)
+                    .then(() => toast('📋 ID copié'))
+                    .catch(() => toast('❌ Erreur'));
+            });
+            $('#btn-share-id').addEventListener('click', () => {
+                if (!STATE.myPeerId) return;
+                if (navigator.share) {
+                    navigator.share({ title: 'Mon ID Tinder P2P', text: STATE.myPeerId }).catch(() => {});
+                } else {
+                    navigator.clipboard.writeText(STATE.myPeerId)
+                        .then(() => toast('📋 ID copié (partage non supporté)'))
+                        .catch(() => toast('❌ Erreur'));
+                }
+            });
+
+            // ========== NAVIGATION ==========
+            $$('nav button').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const screen = btn.dataset.screen;
+                    $$('nav button').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    $$('.screen').forEach(s => s.classList.remove('active'));
+                    $(`#screen-${screen}`).classList.add('active');
+                    if (screen === 'matches') renderMatches();
+                    if (screen === 'discover') renderDiscover();
+                });
+            });
+
+            // ========== DÉMARRAGE ==========
+            loadProfileUI();
+            initBugout().catch(e => {
+                console.error(e);
+                $('#display-peer-id').textContent = '❌ Erreur critique';
+                $('#network-status').textContent = '🔴 Échec';
+            });
+            renderMatches();
+        })();
+    </script>
 </body>
 </html>
