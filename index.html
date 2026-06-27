@@ -143,7 +143,8 @@
     
     <script>
         // ============================================================
-        // TINDER P2P - VRAIE APPLICATION P2P AVEC BUGOUT/WEBRTC
+        // TINDER P2P - VRAI P2P AVEC BUGOUT
+        // Repo : https://github.com/Connacri/Tinder-p2p-app
         // ============================================================
         
         const S = {
@@ -151,19 +152,17 @@
             profile: JSON.parse(localStorage.profile || '{"pseudo":"","bio":"","photo":"","favorites":[],"addedPeers":[]}'),
             online: false,
             bugout: null,
-            peers: {}, // peerId -> {profile, connection, lastSeen}
+            peers: {},
             connections: JSON.parse(localStorage.connections || '{}'),
             currentPeer: null,
             displayed: new Set()
         };
         
         // ============================================================
-        // INITIALISATION BUGOUT (P2P via WebTorrent)
+        // INIT P2P
         // ============================================================
         function initP2P() {
             try {
-                // Créer une room Bugout basée sur un identifiant commun
-                // Tous les utilisateurs avec le même roomId peuvent se découvrir
                 const roomId = 'tinder-p2p-global-room-v1';
                 
                 S.bugout = new Bugout(roomId, {
@@ -173,7 +172,6 @@
                     ]
                 });
                 
-                // Quand on reçoit un message d'un autre pair
                 S.bugout.on('message', (address, data) => {
                     try {
                         const msg = JSON.parse(data);
@@ -181,16 +179,14 @@
                     } catch(e) {}
                 });
                 
-                // Quand un nouveau pair est découvert
                 S.bugout.on('seen', (address) => {
                     console.log('👀 Pair vu:', address.substring(0, 10) + '...');
-                    // Lui envoyer notre profil
                     if (S.online && S.profile.pseudo) {
                         broadcastProfile(address);
                     }
                 });
                 
-                console.log('✅ P2P initialisé avec Bugout');
+                console.log('✅ P2P initialisé');
                 return true;
             } catch(e) {
                 console.error('❌ Erreur P2P:', e);
@@ -201,7 +197,6 @@
         function handleBugoutMessage(address, msg) {
             switch(msg.type) {
                 case 'profile':
-                    // Réception d'un profil
                     if (msg.profile && msg.profile.pseudo) {
                         S.peers[address] = {
                             profile: msg.profile,
@@ -216,7 +211,6 @@
                     break;
                     
                 case 'chat':
-                    // Réception d'un message de chat
                     if (msg.text && msg.from) {
                         receiveMessage(address, msg);
                     }
@@ -292,23 +286,19 @@
             if (S.profile.photo) document.getElementById('profileImg').src = S.profile.photo;
             document.getElementById('shareId').textContent = S.deviceId;
             
-            // Charger les pairs sauvegardés
             if (localStorage.peers) {
                 try { S.peers = JSON.parse(localStorage.peers); } catch(e) {}
             }
             
-            // Setup navigation
             document.querySelectorAll('nav button').forEach(b => {
                 b.onclick = () => switchScreen(b.dataset.screen);
             });
             
-            // Initialiser le P2P
             const p2pReady = initP2P();
             if (!p2pReady) {
                 toast('⚠️ P2P non disponible - recharge la page');
             }
             
-            // Refresh périodique
             setInterval(() => {
                 if (S.online) {
                     broadcastProfile();
@@ -317,11 +307,10 @@
                 }
             }, 10000);
             
-            // Nettoyer les pairs inactifs
             setInterval(() => {
                 const now = Date.now();
                 Object.keys(S.peers).forEach(addr => {
-                    if (now - S.peers[addr].lastSeen > 300000) { // 5 min
+                    if (now - S.peers[addr].lastSeen > 300000) {
                         S.peers[addr].online = false;
                     }
                 });
@@ -400,7 +389,6 @@
             navigator.clipboard.writeText(S.deviceId).then(() => {
                 toast('📋 ID copié ! Envoie-le à tes amis');
             }).catch(() => {
-                // Fallback
                 const input = document.createElement('input');
                 input.value = S.deviceId;
                 document.body.appendChild(input);
@@ -412,13 +400,13 @@
         }
         
         function shareProfile() {
-            const shareText = `Rejoins-moi sur Tinder P2P ! Mon ID: ${S.deviceId}\nOuvre https://TON_USERNAME.github.io/tinder-p2p-pwa/ et ajoute mon ID !`;
+            const shareText = `Rejoins-moi sur Tinder P2P ! Mon ID: ${S.deviceId}\nOuvre https://Connacri.github.io/Tinder-p2p-app/ et ajoute mon ID !`;
             
             if (navigator.share) {
                 navigator.share({
                     title: 'Rejoins-moi sur Tinder P2P !',
                     text: shareText,
-                    url: window.location.href
+                    url: 'https://Connacri.github.io/Tinder-p2p-app/'
                 }).catch(() => {});
             } else {
                 copyShareId();
@@ -438,7 +426,6 @@
                 return;
             }
             
-            // Ajouter aux pairs connus
             if (!S.profile.addedPeers) S.profile.addedPeers = [];
             if (!S.profile.addedPeers.includes(input)) {
                 S.profile.addedPeers.push(input);
@@ -458,10 +445,8 @@
         function refreshDiscover() {
             const grid = document.getElementById('profilesGrid');
             
-            // Combiner les pairs Bugout + les pairs ajoutés manuellement
             const allPeers = { ...S.peers };
             
-            // Ajouter les pairs manuels
             (S.profile.addedPeers || []).forEach(id => {
                 if (!allPeers[id]) {
                     allPeers[id] = {
@@ -588,7 +573,6 @@
                 timestamp: Date.now()
             };
             
-            // Sauvegarder localement
             if (!S.connections[S.currentPeer]) {
                 S.connections[S.currentPeer] = { messages: [] };
             }
@@ -596,7 +580,6 @@
             localStorage['chat_' + S.currentPeer] = JSON.stringify(S.connections[S.currentPeer].messages);
             localStorage.connections = JSON.stringify(S.connections);
             
-            // Envoyer via P2P
             const sent = sendP2PMessage(S.currentPeer, text);
             
             addBubble(msg);
@@ -625,7 +608,6 @@
             localStorage['chat_' + address] = JSON.stringify(S.connections[address].messages);
             localStorage.connections = JSON.stringify(S.connections);
             
-            // Afficher si le chat est ouvert
             if (S.currentPeer === address) {
                 addBubble(message);
                 S.displayed.add(message.id);
@@ -753,7 +735,7 @@
         init();
         console.log('🔥 Tinder P2P ready!');
         console.log('📱 Ton ID:', S.deviceId);
-        console.log('💡 Partage ton ID avec tes amis pour qu\'ils puissent te trouver');
+        console.log('🌐 URL:', 'https://Connacri.github.io/Tinder-p2p-app/');
     </script>
 </body>
 </html>
