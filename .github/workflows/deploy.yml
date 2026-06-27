@@ -44,24 +44,20 @@ jobs:
         run: |
           mkdir -p app/src/main/java/com/connacri/tinderp2p
           mkdir -p app/src/main/res/values
-          mkdir -p app/src/main/res/mipmap-hdpi
           
-          # AndroidManifest.xml
           cat > app/src/main/AndroidManifest.xml << 'MANIFEST'
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <uses-permission android:name="android.permission.INTERNET" />
-              <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
               <application
                   android:allowBackup="true"
-                  android:icon="@mipmap/ic_launcher"
                   android:label="Tinder P2P"
                   android:theme="@style/Theme.AppCompat.NoActionBar"
                   android:usesCleartextTraffic="true">
                   <activity
                       android:name=".MainActivity"
                       android:exported="true"
-                      android:configChanges="orientation|screenSize|keyboardHidden">
+                      android:configChanges="orientation|screenSize">
                       <intent-filter>
                           <action android:name="android.intent.action.MAIN" />
                           <category android:name="android.intent.category.LAUNCHER" />
@@ -71,10 +67,8 @@ jobs:
           </manifest>
           MANIFEST
           
-          # MainActivity.java
           cat > app/src/main/java/com/connacri/tinderp2p/MainActivity.java << 'JAVA'
           package com.connacri.tinderp2p;
-          
           import android.app.Activity;
           import android.os.Bundle;
           import android.webkit.WebView;
@@ -84,39 +78,29 @@ jobs:
           
           public class MainActivity extends Activity {
               private WebView webView;
-              
               @Override
               protected void onCreate(Bundle savedInstanceState) {
                   super.onCreate(savedInstanceState);
-                  
                   webView = new WebView(this);
                   webView.setWebViewClient(new WebViewClient());
                   webView.setWebChromeClient(new WebChromeClient());
-                  
                   WebSettings settings = webView.getSettings();
                   settings.setJavaScriptEnabled(true);
                   settings.setDomStorageEnabled(true);
                   settings.setDatabaseEnabled(true);
                   settings.setAllowFileAccess(true);
                   settings.setMediaPlaybackRequiresUserGesture(false);
-                  settings.setAllowContentAccess(true);
-                  
                   webView.loadUrl("https://connacri.github.io/Tinder-p2p-app/");
                   setContentView(webView);
               }
-              
               @Override
               public void onBackPressed() {
-                  if (webView != null && webView.canGoBack()) {
-                      webView.goBack();
-                  } else {
-                      super.onBackPressed();
-                  }
+                  if (webView != null && webView.canGoBack()) webView.goBack();
+                  else super.onBackPressed();
               }
           }
           JAVA
           
-          # Styles
           cat > app/src/main/res/values/styles.xml << 'STYLES'
           <?xml version="1.0" encoding="utf-8"?>
           <resources>
@@ -127,25 +111,6 @@ jobs:
               </style>
           </resources>
           STYLES
-          
-          # Colors
-          cat > app/src/main/res/values/colors.xml << 'COLORS'
-          <?xml version="1.0" encoding="utf-8"?>
-          <resources>
-              <color name="colorPrimary">#1a73e8</color>
-              <color name="colorPrimaryDark">#1557b0</color>
-              <color name="colorAccent">#1a73e8</color>
-          </resources>
-          COLORS
-
-          # Icône placeholder
-          cat > app/src/main/res/mipmap-hdpi/ic_launcher.xml << 'ICON'
-          <?xml version="1.0" encoding="utf-8"?>
-          <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-              <background android:drawable="@color/colorPrimary"/>
-              <foreground android:drawable="@color/colorPrimaryDark"/>
-          </adaptive-icon>
-          ICON
       
       - name: 📝 Create Gradle files
         run: |
@@ -181,11 +146,9 @@ jobs:
           plugins {
               id 'com.android.application'
           }
-          
           android {
               namespace 'com.connacri.tinderp2p'
               compileSdk 34
-              
               defaultConfig {
                   applicationId "com.connacri.tinderp2p"
                   minSdk 21
@@ -193,7 +156,6 @@ jobs:
                   versionCode 1
                   versionName "1.0.0"
               }
-              
               signingConfigs {
                   release {
                       storeFile file("../release.keystore")
@@ -202,20 +164,17 @@ jobs:
                       keyPassword "android123"
                   }
               }
-              
               buildTypes {
                   release {
                       minifyEnabled false
                       signingConfig signingConfigs.release
                   }
               }
-              
               compileOptions {
                   sourceCompatibility JavaVersion.VERSION_17
                   targetCompatibility JavaVersion.VERSION_17
               }
           }
-          
           dependencies {
               implementation 'androidx.appcompat:appcompat:1.6.1'
           }
@@ -223,32 +182,42 @@ jobs:
           
           # gradle.properties
           cat > gradle.properties << 'PROPS'
-          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          org.gradle.jvmargs=-Xmx2048m
           android.useAndroidX=true
           android.nonTransitiveRClass=true
           PROPS
       
-      - name: 🔨 Setup Gradle wrapper
+      - name: 📥 Download Gradle 8.2
         run: |
-          # Utiliser gradle pour générer le wrapper
+          # Télécharger Gradle 8.2 directement
+          wget -q https://services.gradle.org/distributions/gradle-8.2-bin.zip
+          unzip -q gradle-8.2-bin.zip
+          
+          # Remplacer le gradle système
+          echo "GRADLE_HOME=$PWD/gradle-8.2" >> $GITHUB_ENV
+          echo "$PWD/gradle-8.2/bin" >> $GITHUB_PATH
+          
+          # Vérifier la version
+          $PWD/gradle-8.2/bin/gradle --version
+      
+      - name: 🔨 Generate wrapper and build
+        run: |
+          # Générer le wrapper avec Gradle 8.2
           gradle wrapper --gradle-version 8.2
           
-          # Vérifier
+          # Vérifier que gradlew existe
           ls -la gradlew
-          ls -la gradle/wrapper/
-      
-      - name: 🏗️ Build APK
-        run: |
-          ./gradlew assembleRelease --no-daemon --stacktrace
+          
+          # Build l'APK
+          ./gradlew assembleRelease --no-daemon
       
       - name: 📋 Find APK
         run: |
           echo "===================="
-          echo "APK généré :"
           find . -name "*.apk" -type f -exec ls -lh {} \;
           echo "===================="
       
-      - name: 📤 Upload APK artifact
+      - name: 📤 Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Tinder-P2P-APK
@@ -257,11 +226,10 @@ jobs:
             app/build/outputs/apk/debug/*.apk
           retention-days: 30
       
-      - name: 🚀 Create Release (on tag)
+      - name: 🚀 Create Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/v')
         with:
           files: app/build/outputs/apk/release/*.apk
-          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
