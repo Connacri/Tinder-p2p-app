@@ -9,7 +9,6 @@
     <meta name="apple-mobile-web-app-title" content="Tinder P2P">
     <link rel="manifest" href="manifest.json">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔥</text></svg>">
-    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔥</text></svg>">
     <title>🔥 Tinder P2P</title>
     <style>
         *{margin:0;padding:0;box-sizing:border-box}
@@ -30,7 +29,7 @@
         .btn-on{background:var(--g);animation:pulse 2s infinite}
         .btn-off{background:var(--r)}
         @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(40,167,69,.4)}50%{box-shadow:0 0 0 10px rgba(40,167,69,0)}}
-        .profile-img{width:150px;height:150px;border-radius:50%;object-fit:cover;display:block;margin:15px auto;border:4px solid var(--p)}
+        .profile-img{width:150px;height:150px;border-radius:50%;object-fit:cover;display:block;margin:15px auto;border:4px solid var(--p);background:#ddd}
         .input-group{margin-bottom:12px}
         .input-group input,.input-group textarea{width:100%;padding:12px;border:2px solid var(--b);border-radius:10px;font-size:16px;background:var(--c)}
         .input-group input:focus,.input-group textarea:focus{outline:none;border-color:var(--p)}
@@ -38,7 +37,7 @@
         .card{background:var(--c);border-radius:12px;padding:15px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,.1);animation:up .3s}
         @keyframes up{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
         .card-row{display:flex;align-items:center;gap:12px;margin-bottom:10px}
-        .card-img{width:55px;height:55px;border-radius:50%;object-fit:cover;background:var(--b)}
+        .card-img{width:55px;height:55px;border-radius:50%;object-fit:cover;background:var(--b);display:flex;align-items:center;justify-content:center;font-size:30px}
         .card-info h3{font-size:15px}.card-info p{font-size:12px;color:#666}
         .card-btns{display:flex;gap:8px}
         .btn-chat{flex:1;padding:10px;background:var(--p);color:#fff;border:none;border-radius:20px;cursor:pointer;font-weight:600}
@@ -59,8 +58,13 @@
         .chat-input button{background:var(--p);color:#fff;border:none;padding:10px 18px;border-radius:25px;cursor:pointer;font-size:18px}
         .empty{text-align:center;color:#999;padding:40px;font-size:15px}
         .id-display{text-align:center;color:#999;font-size:11px;margin-top:15px}
+        .id-box{background:#f8f8f8;padding:10px;border-radius:8px;margin:10px 0;font-family:monospace;font-size:12px;word-break:break-all;text-align:center}
+        .share-btn{background:var(--g);color:#fff;border:none;padding:8px 15px;border-radius:15px;cursor:pointer;font-size:12px;margin:5px}
         .toast{position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:12px 24px;border-radius:25px;z-index:999;font-size:14px;animation:toastIn .3s}
         @keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(-20px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+        .status-dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:5px}
+        .status-dot.online{background:var(--g)}
+        .status-dot.offline{background:var(--r)}
     </style>
 </head>
 <body>
@@ -72,6 +76,7 @@
             <button data-screen="favorites">⭐<span>Favoris</span></button>
         </nav>
         <main>
+            <!-- Profile Screen -->
             <div id="s-profile" class="screen active">
                 <div class="header">
                     <h2>👤 Mon Profil</h2>
@@ -87,8 +92,19 @@
                     <textarea id="bioInput" placeholder="Bio (optionnel)" maxlength="200" rows="2"></textarea>
                 </div>
                 <button class="btn-main" onclick="saveProfile()">💾 Sauvegarder</button>
-                <div class="id-display">ID: <span id="deviceId"></span></div>
+                <div class="id-box">
+                    <strong>🔗 Ton ID de partage :</strong><br>
+                    <span id="shareId">Génération en cours...</span>
+                    <br>
+                    <button class="share-btn" onclick="copyShareId()">📋 Copier</button>
+                    <button class="share-btn" onclick="shareProfile()">📤 Partager</button>
+                </div>
+                <div class="input-group">
+                    <input type="text" id="addPeerInput" placeholder="Colle l'ID d'un ami ici...">
+                </div>
+                <button class="btn-main" style="background:#ff6b35" onclick="addPeerByShareId()">➕ Ajouter un ami</button>
             </div>
+            <!-- Discover Screen -->
             <div id="s-discover" class="screen">
                 <div class="header">
                     <h2>🔍 Découvrir</h2>
@@ -96,15 +112,18 @@
                 </div>
                 <div id="profilesGrid"></div>
             </div>
+            <!-- Chats Screen -->
             <div id="s-chats" class="screen">
                 <div class="header"><h2>💬 Messages</h2></div>
                 <div id="chatsList"><p class="empty">Aucune conversation</p></div>
             </div>
+            <!-- Favorites Screen -->
             <div id="s-favorites" class="screen">
                 <div class="header"><h2>⭐ Favoris</h2></div>
                 <div id="favList"><p class="empty">Aucun favori</p></div>
             </div>
         </main>
+        <!-- Chat Overlay -->
         <div id="chatOverlay" class="chat-overlay">
             <div class="chat-header">
                 <button onclick="closeChat()">← Retour</button>
@@ -118,214 +137,623 @@
             </div>
         </div>
     </div>
+
+    <!-- Bugout P2P Library -->
+    <script src="https://cdn.jsdelivr.net/npm/bugout@0.0.10/index.js"></script>
+    
     <script>
-        // === APP STATE ===
+        // ============================================================
+        // TINDER P2P - VRAIE APPLICATION P2P AVEC BUGOUT/WEBRTC
+        // ============================================================
+        
         const S = {
-            deviceId: localStorage.deviceId || (localStorage.deviceId = crypto.randomUUID()),
-            profile: JSON.parse(localStorage.profile || '{"pseudo":"User","bio":"","photo":"","favorites":[]}'),
+            deviceId: localStorage.deviceId || (localStorage.deviceId = 'user_' + Math.random().toString(36).substr(2, 9)),
+            profile: JSON.parse(localStorage.profile || '{"pseudo":"","bio":"","photo":"","favorites":[],"addedPeers":[]}'),
             online: false,
-            peers: {},
+            bugout: null,
+            peers: {}, // peerId -> {profile, connection, lastSeen}
             connections: JSON.parse(localStorage.connections || '{}'),
             currentPeer: null,
             displayed: new Set()
         };
         
-        // === INIT ===
-        function init(){
+        // ============================================================
+        // INITIALISATION BUGOUT (P2P via WebTorrent)
+        // ============================================================
+        function initP2P() {
+            try {
+                // Créer une room Bugout basée sur un identifiant commun
+                // Tous les utilisateurs avec le même roomId peuvent se découvrir
+                const roomId = 'tinder-p2p-global-room-v1';
+                
+                S.bugout = new Bugout(roomId, {
+                    announce: [
+                        'wss://tracker.openwebtorrent.com',
+                        'wss://tracker.btorrent.xyz'
+                    ]
+                });
+                
+                // Quand on reçoit un message d'un autre pair
+                S.bugout.on('message', (address, data) => {
+                    try {
+                        const msg = JSON.parse(data);
+                        handleBugoutMessage(address, msg);
+                    } catch(e) {}
+                });
+                
+                // Quand un nouveau pair est découvert
+                S.bugout.on('seen', (address) => {
+                    console.log('👀 Pair vu:', address.substring(0, 10) + '...');
+                    // Lui envoyer notre profil
+                    if (S.online && S.profile.pseudo) {
+                        broadcastProfile(address);
+                    }
+                });
+                
+                console.log('✅ P2P initialisé avec Bugout');
+                return true;
+            } catch(e) {
+                console.error('❌ Erreur P2P:', e);
+                return false;
+            }
+        }
+        
+        function handleBugoutMessage(address, msg) {
+            switch(msg.type) {
+                case 'profile':
+                    // Réception d'un profil
+                    if (msg.profile && msg.profile.pseudo) {
+                        S.peers[address] = {
+                            profile: msg.profile,
+                            lastSeen: Date.now(),
+                            online: true
+                        };
+                        localStorage.peers = JSON.stringify(S.peers);
+                        if (document.getElementById('s-discover').classList.contains('active')) {
+                            refreshDiscover();
+                        }
+                    }
+                    break;
+                    
+                case 'chat':
+                    // Réception d'un message de chat
+                    if (msg.text && msg.from) {
+                        receiveMessage(address, msg);
+                    }
+                    break;
+                    
+                case 'online':
+                    if (S.peers[address]) {
+                        S.peers[address].online = true;
+                        S.peers[address].lastSeen = Date.now();
+                    }
+                    break;
+                    
+                case 'offline':
+                    if (S.peers[address]) {
+                        S.peers[address].online = false;
+                    }
+                    break;
+            }
+        }
+        
+        function broadcastProfile(specificAddress) {
+            if (!S.bugout || !S.profile.pseudo) return;
+            
+            const profileMsg = JSON.stringify({
+                type: 'profile',
+                profile: {
+                    pseudo: S.profile.pseudo,
+                    bio: S.profile.bio,
+                    photo: S.profile.photo,
+                    id: S.deviceId
+                },
+                timestamp: Date.now()
+            });
+            
+            if (specificAddress) {
+                S.bugout.send(specificAddress, profileMsg);
+            } else {
+                S.bugout.send(profileMsg);
+            }
+        }
+        
+        function broadcastStatus(online) {
+            if (!S.bugout) return;
+            const msg = JSON.stringify({
+                type: online ? 'online' : 'offline',
+                id: S.deviceId,
+                timestamp: Date.now()
+            });
+            S.bugout.send(msg);
+        }
+        
+        function sendP2PMessage(address, text) {
+            if (!S.bugout) return false;
+            
+            const msg = JSON.stringify({
+                type: 'chat',
+                from: S.deviceId,
+                text: text,
+                timestamp: Date.now(),
+                id: Math.random().toString(36).substr(2, 9)
+            });
+            
+            S.bugout.send(address, msg);
+            return true;
+        }
+        
+        // ============================================================
+        // INIT
+        // ============================================================
+        function init() {
             document.getElementById('pseudoInput').value = S.profile.pseudo || '';
             document.getElementById('bioInput').value = S.profile.bio || '';
-            if(S.profile.photo) document.getElementById('profileImg').src = S.profile.photo;
-            document.getElementById('deviceId').textContent = S.deviceId.substring(0,10)+'...';
-            document.querySelectorAll('nav button').forEach(b => b.onclick = () => switchScreen(b.dataset.screen));
-            if(!localStorage.peers) setupPeers();
-            S.peers = JSON.parse(localStorage.peers || '{}');
-            setInterval(refreshDiscover, 5000);
+            if (S.profile.photo) document.getElementById('profileImg').src = S.profile.photo;
+            document.getElementById('shareId').textContent = S.deviceId;
+            
+            // Charger les pairs sauvegardés
+            if (localStorage.peers) {
+                try { S.peers = JSON.parse(localStorage.peers); } catch(e) {}
+            }
+            
+            // Setup navigation
+            document.querySelectorAll('nav button').forEach(b => {
+                b.onclick = () => switchScreen(b.dataset.screen);
+            });
+            
+            // Initialiser le P2P
+            const p2pReady = initP2P();
+            if (!p2pReady) {
+                toast('⚠️ P2P non disponible - recharge la page');
+            }
+            
+            // Refresh périodique
+            setInterval(() => {
+                if (S.online) {
+                    broadcastProfile();
+                    broadcastStatus(true);
+                    refreshDiscover();
+                }
+            }, 10000);
+            
+            // Nettoyer les pairs inactifs
+            setInterval(() => {
+                const now = Date.now();
+                Object.keys(S.peers).forEach(addr => {
+                    if (now - S.peers[addr].lastSeen > 300000) { // 5 min
+                        S.peers[addr].online = false;
+                    }
+                });
+            }, 60000);
         }
         
-        // === NAVIGATION ===
-        function switchScreen(name){
+        // ============================================================
+        // NAVIGATION
+        // ============================================================
+        function switchScreen(name) {
             document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-            document.getElementById('s-'+name).classList.add('active');
+            document.getElementById('s-' + name).classList.add('active');
             document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.dataset.screen === name));
-            if(name==='discover') refreshDiscover();
-            if(name==='chats') refreshChats();
-            if(name==='favorites') refreshFavs();
+            if (name === 'discover') refreshDiscover();
+            if (name === 'chats') refreshChats();
+            if (name === 'favorites') refreshFavs();
         }
         
-        // === ONLINE TOGGLE ===
-        function toggleOnline(){
+        // ============================================================
+        // ONLINE/OFFLINE
+        // ============================================================
+        function toggleOnline() {
+            if (!S.profile.pseudo) {
+                toast('❌ Définis d\'abord un pseudo !');
+                return;
+            }
+            
             S.online = !S.online;
             const btn = document.getElementById('onlineBtn');
-            if(S.online){btn.textContent='🟢 Online';btn.className='btn btn-on';toast('🟢 Vous êtes en ligne !');refreshDiscover();}
-            else{btn.textContent='🔴 Offline';btn.className='btn btn-off';toast('🔴 Vous êtes hors ligne');}
+            
+            if (S.online) {
+                btn.textContent = '🟢 Online';
+                btn.className = 'btn btn-on';
+                broadcastProfile();
+                broadcastStatus(true);
+                toast('🟢 Tu es en ligne ! Les autres peuvent te trouver');
+                refreshDiscover();
+            } else {
+                btn.textContent = '🔴 Offline';
+                btn.className = 'btn btn-off';
+                broadcastStatus(false);
+                toast('🔴 Tu es hors ligne');
+            }
         }
         
-        // === PROFILE ===
-        function handlePhoto(e){
-            const f = e.target.files[0]; if(!f) return;
+        // ============================================================
+        // PROFILE
+        // ============================================================
+        function handlePhoto(e) {
+            const f = e.target.files[0];
+            if (!f) return;
             const r = new FileReader();
-            r.onload = ev => {S.profile.photo=ev.target.result;document.getElementById('profileImg').src=ev.target.result;saveProfile();toast('📸 Photo mise à jour !')};
+            r.onload = ev => {
+                S.profile.photo = ev.target.result;
+                document.getElementById('profileImg').src = ev.target.result;
+                saveProfile();
+                toast('📸 Photo mise à jour !');
+                if (S.online) broadcastProfile();
+            };
             r.readAsDataURL(f);
         }
-        function saveProfile(){
-            S.profile.pseudo = document.getElementById('pseudoInput').value.trim() || 'User';
+        
+        function saveProfile() {
+            S.profile.pseudo = document.getElementById('pseudoInput').value.trim() || S.profile.pseudo;
             S.profile.bio = document.getElementById('bioInput').value.trim();
             localStorage.profile = JSON.stringify(S.profile);
+            document.getElementById('shareId').textContent = S.deviceId;
             toast('✅ Profil sauvegardé !');
+            if (S.online) broadcastProfile();
         }
         
-        // === DEMO PEERS ===
-        function setupPeers(){
-            S.peers = {
-                alice:{pseudo:'Alice',bio:'Chats & café ☕',photo:'',online:true,last:new Date().toISOString()},
-                bob:{pseudo:'Bob',bio:'Dev Python 🏔️',photo:'',online:true,last:new Date().toISOString()},
-                charlie:{pseudo:'Charlie',bio:'Artiste digital ✨',photo:'',online:false,last:new Date().toISOString()},
-                diana:{pseudo:'Diana',bio:'Photographe 📸',photo:'',online:true,last:new Date().toISOString()}
-            };
-            localStorage.peers = JSON.stringify(S.peers);
+        // ============================================================
+        // PARTAGE D'ID
+        // ============================================================
+        function copyShareId() {
+            navigator.clipboard.writeText(S.deviceId).then(() => {
+                toast('📋 ID copié ! Envoie-le à tes amis');
+            }).catch(() => {
+                // Fallback
+                const input = document.createElement('input');
+                input.value = S.deviceId;
+                document.body.appendChild(input);
+                input.select();
+                document.execCommand('copy');
+                document.body.removeChild(input);
+                toast('📋 ID copié !');
+            });
         }
         
-        // === DISCOVER ===
-        function refreshDiscover(){
-            if(!S.online) return;
-            const online = Object.entries(S.peers).filter(([id,p]) => p.online && id !== S.deviceId);
-            document.getElementById('onlineCount').textContent = online.length + ' en ligne';
+        function shareProfile() {
+            const shareText = `Rejoins-moi sur Tinder P2P ! Mon ID: ${S.deviceId}\nOuvre https://TON_USERNAME.github.io/tinder-p2p-pwa/ et ajoute mon ID !`;
+            
+            if (navigator.share) {
+                navigator.share({
+                    title: 'Rejoins-moi sur Tinder P2P !',
+                    text: shareText,
+                    url: window.location.href
+                }).catch(() => {});
+            } else {
+                copyShareId();
+                toast('📤 Lien copié ! Envoie-le à tes amis');
+            }
+        }
+        
+        function addPeerByShareId() {
+            const input = document.getElementById('addPeerInput').value.trim();
+            if (!input) {
+                toast('❌ Entre un ID valide');
+                return;
+            }
+            
+            if (input === S.deviceId) {
+                toast('❌ C\'est ton propre ID !');
+                return;
+            }
+            
+            // Ajouter aux pairs connus
+            if (!S.profile.addedPeers) S.profile.addedPeers = [];
+            if (!S.profile.addedPeers.includes(input)) {
+                S.profile.addedPeers.push(input);
+                localStorage.profile = JSON.stringify(S.profile);
+                toast('✅ Ami ajouté ! Il apparaîtra quand il sera en ligne');
+            } else {
+                toast('⚠️ Déjà dans ta liste');
+            }
+            
+            document.getElementById('addPeerInput').value = '';
+            refreshDiscover();
+        }
+        
+        // ============================================================
+        // DISCOVER
+        // ============================================================
+        function refreshDiscover() {
             const grid = document.getElementById('profilesGrid');
-            grid.innerHTML = online.length ? '' : '<p class="empty">Aucun profil en ligne</p>';
-            online.forEach(([id,p]) => {
-                const card = document.createElement('div'); card.className='card';
+            
+            // Combiner les pairs Bugout + les pairs ajoutés manuellement
+            const allPeers = { ...S.peers };
+            
+            // Ajouter les pairs manuels
+            (S.profile.addedPeers || []).forEach(id => {
+                if (!allPeers[id]) {
+                    allPeers[id] = {
+                        profile: { pseudo: 'Ajouté (' + id.substring(0, 8) + '...)', bio: 'En attente...', id: id },
+                        lastSeen: 0,
+                        online: false
+                    };
+                }
+            });
+            
+            const onlinePeers = Object.entries(allPeers)
+                .filter(([id, p]) => id !== S.deviceId && p.profile && p.profile.pseudo);
+            
+            document.getElementById('onlineCount').textContent = 
+                onlinePeers.filter(([id, p]) => p.online).length + ' en ligne / ' + onlinePeers.length + ' connus';
+            
+            if (!onlinePeers.length) {
+                grid.innerHTML = `
+                    <p class="empty">Aucun utilisateur trouvé</p>
+                    <div style="text-align:center;padding:20px;color:#666">
+                        <p>💡 Pour trouver des amis :</p>
+                        <p style="font-size:14px;margin-top:10px">1. Copie ton ID</p>
+                        <p style="font-size:14px">2. Envoie-le à tes amis</p>
+                        <p style="font-size:14px">3. Ils pourront t'ajouter</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            grid.innerHTML = '';
+            onlinePeers.forEach(([id, p]) => {
+                const card = document.createElement('div');
+                card.className = 'card';
+                
                 const isFav = S.profile.favorites.includes(id);
-                card.innerHTML = `<div class="card-row">
-                    <div class="card-img" style="background:#ddd;display:flex;align-items:center;justify-content:center;font-size:30px">👤</div>
-                    <div class="card-info"><h3>${p.pseudo}</h3><p>${(p.bio||'').substring(0,50)}</p></div>
-                </div>
-                <div class="card-btns">
-                    <button class="btn-chat" onclick="startChat('${id}')">💬 Chat</button>
-                    <button class="btn-star" onclick="toggleFav('${id}',this)">${isFav?'⭐':'☆'}</button>
-                </div>`;
+                const statusDot = p.online ? '<span class="status-dot online"></span>' : '<span class="status-dot offline"></span>';
+                
+                card.innerHTML = `
+                    <div class="card-row">
+                        <div class="card-img">${p.profile.photo ? '<img src="'+p.profile.photo+'" style="width:100%;height:100%;border-radius:50%;object-fit:cover">' : '👤'}</div>
+                        <div class="card-info">
+                            <h3>${statusDot}${p.profile.pseudo}</h3>
+                            <p>${(p.profile.bio || 'Pas de bio').substring(0, 50)}</p>
+                            <p style="font-size:10px;color:#999">${p.online ? 'En ligne' : 'Vu il y a ' + Math.round((Date.now() - p.lastSeen)/60000) + ' min'}</p>
+                        </div>
+                    </div>
+                    <div class="card-btns">
+                        <button class="btn-chat" onclick="startChat('${id}')" ${!p.online ? 'disabled style="opacity:0.5"' : ''}>💬 Chat</button>
+                        <button class="btn-star" onclick="toggleFav('${id}',this)">${isFav ? '⭐' : '☆'}</button>
+                    </div>
+                `;
                 grid.appendChild(card);
             });
         }
         
-        // === CHAT ===
-        function startChat(id){
+        // ============================================================
+        // CHAT
+        // ============================================================
+        function startChat(id) {
             S.currentPeer = id;
-            if(!S.connections[id]) S.connections[id] = {messages:[]};
-            const cached = localStorage['chat_'+id];
-            if(cached) S.connections[id].messages = JSON.parse(cached);
-            const peer = S.peers[id] || {pseudo:id.substring(0,8)};
-            document.getElementById('chatName').textContent = peer.pseudo;
+            
+            if (!S.connections[id]) {
+                S.connections[id] = { messages: [] };
+            }
+            
+            const cached = localStorage['chat_' + id];
+            if (cached) {
+                try { S.connections[id].messages = JSON.parse(cached); } catch(e) {}
+            }
+            
+            const peer = S.peers[id];
+            const peerName = peer?.profile?.pseudo || (S.profile.addedPeers?.includes(id) ? 'Ajouté (' + id.substring(0, 8) + '...)' : id.substring(0, 10) + '...');
+            
+            document.getElementById('chatName').textContent = peerName;
             document.getElementById('chatFavBtn').textContent = S.profile.favorites.includes(id) ? '★' : '☆';
+            
             loadMessages();
             document.getElementById('chatOverlay').style.display = 'flex';
-            document.getElementById('chatInput').focus();
+            setTimeout(() => document.getElementById('chatInput').focus(), 300);
         }
-        function closeChat(){
+        
+        function closeChat() {
             document.getElementById('chatOverlay').style.display = 'none';
             S.currentPeer = null;
             refreshChats();
         }
-        function loadMessages(){
-            const c = document.getElementById('chatMessages'); c.innerHTML = '';
+        
+        function loadMessages() {
+            const c = document.getElementById('chatMessages');
+            c.innerHTML = '';
             S.displayed.clear();
-            (S.connections[S.currentPeer]?.messages||[]).forEach(m => {
-                if(!S.displayed.has(m.id)){addBubble(m);S.displayed.add(m.id);}
+            
+            const msgs = S.connections[S.currentPeer]?.messages || [];
+            msgs.forEach(m => {
+                if (!S.displayed.has(m.id)) {
+                    addBubble(m);
+                    S.displayed.add(m.id);
+                }
             });
+            
             c.scrollTop = c.scrollHeight;
         }
-        function addBubble(m){
+        
+        function addBubble(m) {
             const d = document.createElement('div');
             d.className = 'msg ' + (m.from === S.deviceId ? 'sent' : 'recv');
-            d.innerHTML = m.text + '<time>' + new Date(m.time).toLocaleTimeString('fr',{hour:'2-digit',minute:'2-digit'}) + '</time>';
+            const time = new Date(m.timestamp).toLocaleTimeString('fr', { hour: '2-digit', minute: '2-digit' });
+            d.innerHTML = m.text + '<time>' + time + '</time>';
             document.getElementById('chatMessages').appendChild(d);
         }
-        function sendMsg(){
-            if(!S.currentPeer) return;
+        
+        function sendMsg() {
+            if (!S.currentPeer) return;
+            
             const input = document.getElementById('chatInput');
-            const text = input.value.trim(); if(!text) return;
-            const msg = {id:crypto.randomUUID(),from:S.deviceId,to:S.currentPeer,text:text,time:new Date().toISOString()};
-            if(!S.connections[S.currentPeer]) S.connections[S.currentPeer] = {messages:[]};
+            const text = input.value.trim();
+            if (!text) return;
+            
+            const msg = {
+                id: Math.random().toString(36).substr(2, 9),
+                from: S.deviceId,
+                to: S.currentPeer,
+                text: text,
+                timestamp: Date.now()
+            };
+            
+            // Sauvegarder localement
+            if (!S.connections[S.currentPeer]) {
+                S.connections[S.currentPeer] = { messages: [] };
+            }
             S.connections[S.currentPeer].messages.push(msg);
-            localStorage['chat_'+S.currentPeer] = JSON.stringify(S.connections[S.currentPeer].messages);
+            localStorage['chat_' + S.currentPeer] = JSON.stringify(S.connections[S.currentPeer].messages);
             localStorage.connections = JSON.stringify(S.connections);
-            addBubble(msg); S.displayed.add(msg.id);
+            
+            // Envoyer via P2P
+            const sent = sendP2PMessage(S.currentPeer, text);
+            
+            addBubble(msg);
+            S.displayed.add(msg.id);
             input.value = '';
             document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
-            if(S.currentPeer.startsWith('alice')||S.currentPeer.startsWith('bob')||S.currentPeer.startsWith('diana')){
-                setTimeout(() => simulateReply(S.currentPeer), 1500);
+            
+            if (!sent) {
+                toast('⚠️ Message sauvegardé localement, sera envoyé quand le pair sera en ligne');
             }
         }
-        function simulateReply(id){
-            const reps = {alice:['Salut! 👋','Ça va ?','Cool !'],bob:['Hey !','Tu codes ?','Nice !'],diana:['Hello !','Ravie !','📸']};
-            const rep = reps[id] || ['Salut !'];
-            const msg = {id:crypto.randomUUID(),from:id,to:S.deviceId,text:rep[Math.floor(Math.random()*rep.length)],time:new Date().toISOString()};
-            if(!S.connections[id]) S.connections[id] = {messages:[]};
-            S.connections[id].messages.push(msg);
-            localStorage['chat_'+id] = JSON.stringify(S.connections[id].messages);
-            if(S.currentPeer === id){addBubble(msg);S.displayed.add(msg.id);document.getElementById('chatMessages').scrollTop=document.getElementById('chatMessages').scrollHeight;}
+        
+        function receiveMessage(address, msg) {
+            const message = {
+                id: msg.id || Math.random().toString(36).substr(2, 9),
+                from: msg.from || address,
+                to: S.deviceId,
+                text: msg.text,
+                timestamp: msg.timestamp || Date.now()
+            };
+            
+            if (!S.connections[address]) {
+                S.connections[address] = { messages: [] };
+            }
+            S.connections[address].messages.push(message);
+            localStorage['chat_' + address] = JSON.stringify(S.connections[address].messages);
+            localStorage.connections = JSON.stringify(S.connections);
+            
+            // Afficher si le chat est ouvert
+            if (S.currentPeer === address) {
+                addBubble(message);
+                S.displayed.add(message.id);
+                document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
+            } else {
+                toast('💬 Nouveau message de ' + (S.peers[address]?.profile?.pseudo || 'quelqu\'un'));
+            }
+            
+            refreshChats();
         }
         
-        // === FAVORITES ===
-        function toggleFav(id,btn){
+        // ============================================================
+        // FAVORITES
+        // ============================================================
+        function toggleFav(id, btn) {
             const idx = S.profile.favorites.indexOf(id);
-            if(idx > -1){S.profile.favorites.splice(idx,1);if(btn)btn.textContent='☆';}
-            else{S.profile.favorites.push(id);if(btn)btn.textContent='⭐';}
+            if (idx > -1) {
+                S.profile.favorites.splice(idx, 1);
+                if (btn) btn.textContent = '☆';
+            } else {
+                S.profile.favorites.push(id);
+                if (btn) btn.textContent = '⭐';
+            }
             localStorage.profile = JSON.stringify(S.profile);
         }
-        function toggleFavInChat(){
-            if(!S.currentPeer) return;
+        
+        function toggleFavInChat() {
+            if (!S.currentPeer) return;
             const btn = document.getElementById('chatFavBtn');
             const idx = S.profile.favorites.indexOf(S.currentPeer);
-            if(idx > -1){S.profile.favorites.splice(idx,1);btn.textContent='☆';}
-            else{S.profile.favorites.push(S.currentPeer);btn.textContent='★';}
+            if (idx > -1) {
+                S.profile.favorites.splice(idx, 1);
+                btn.textContent = '☆';
+            } else {
+                S.profile.favorites.push(S.currentPeer);
+                btn.textContent = '★';
+            }
             localStorage.profile = JSON.stringify(S.profile);
         }
-        function refreshFavs(){
+        
+        function refreshFavs() {
             const list = document.getElementById('favList');
-            const favs = S.profile.favorites.filter(id => S.peers[id]);
-            if(!favs.length){list.innerHTML='<p class="empty">Aucun favori</p>';return;}
+            const favs = S.profile.favorites.filter(id => S.peers[id] || S.profile.addedPeers?.includes(id));
+            
+            if (!favs.length) {
+                list.innerHTML = '<p class="empty">Aucun favori</p>';
+                return;
+            }
+            
             list.innerHTML = '';
             favs.forEach(id => {
                 const p = S.peers[id];
-                const d = document.createElement('div'); d.className='card';
-                d.innerHTML = `<div class="card-row">
-                    <div class="card-img" style="background:#ddd;display:flex;align-items:center;justify-content:center;font-size:25px">👤</div>
-                    <div class="card-info"><h3>${p.online?'🟢':'🔴'} ${p.pseudo}</h3><p>Vu: ${new Date(p.last).toLocaleDateString()}</p></div>
-                </div>
-                <div class="card-btns">
-                    <button class="btn-chat" onclick="startChat('${id}')">💬</button>
-                    <button class="btn-star" onclick="toggleFav('${id}',this);refreshFavs()">🗑</button>
-                </div>`;
+                const name = p?.profile?.pseudo || 'Ajouté (' + id.substring(0, 8) + '...)';
+                const online = p?.online || false;
+                
+                const d = document.createElement('div');
+                d.className = 'card';
+                d.innerHTML = `
+                    <div class="card-row">
+                        <div class="card-img">${p?.profile?.photo ? '<img src="'+p.profile.photo+'" style="width:100%;height:100%;border-radius:50%;object-fit:cover">' : '👤'}</div>
+                        <div class="card-info">
+                            <h3><span class="status-dot ${online ? 'online' : 'offline'}"></span>${name}</h3>
+                            <p>${online ? 'En ligne' : 'Hors ligne'}</p>
+                        </div>
+                    </div>
+                    <div class="card-btns">
+                        <button class="btn-chat" onclick="startChat('${id}')" ${!online ? 'disabled style="opacity:0.5"' : ''}>💬 Chat</button>
+                        <button class="btn-star" onclick="toggleFav('${id}',this);refreshFavs()">🗑 Retirer</button>
+                    </div>
+                `;
                 list.appendChild(d);
             });
         }
-        function refreshChats(){
+        
+        function refreshChats() {
             const list = document.getElementById('chatsList');
-            const convs = Object.keys(S.connections).filter(id => S.connections[id].messages.length);
-            if(!convs.length){list.innerHTML='<p class="empty">Aucune conversation</p>';return;}
+            const convs = Object.keys(S.connections).filter(id => S.connections[id].messages?.length);
+            
+            if (!convs.length) {
+                list.innerHTML = '<p class="empty">Aucune conversation</p>';
+                return;
+            }
+            
             list.innerHTML = '';
             convs.forEach(id => {
-                const p = S.peers[id] || {pseudo:id.substring(0,8)};
+                const p = S.peers[id];
+                const name = p?.profile?.pseudo || 'Ajouté (' + id.substring(0, 8) + '...)';
                 const count = S.connections[id].messages.length;
-                const d = document.createElement('div'); d.className='card';
-                d.innerHTML = `<div class="card-row">
-                    <div class="card-img" style="background:#ddd;display:flex;align-items:center;justify-content:center;font-size:25px">💬</div>
-                    <div class="card-info"><h3>${p.pseudo}</h3><p>${count} messages</p></div>
-                </div>
-                <button class="btn-chat" onclick="startChat('${id}')" style="width:100%">Ouvrir</button>`;
+                const lastMsg = S.connections[id].messages[S.connections[id].messages.length - 1];
+                
+                const d = document.createElement('div');
+                d.className = 'card';
+                d.innerHTML = `
+                    <div class="card-row">
+                        <div class="card-img" style="font-size:25px">💬</div>
+                        <div class="card-info">
+                            <h3>${name}</h3>
+                            <p>${count} messages · Dernier: ${lastMsg ? new Date(lastMsg.timestamp).toLocaleTimeString('fr', {hour:'2-digit', minute:'2-digit'}) : ''}</p>
+                        </div>
+                    </div>
+                    <button class="btn-chat" onclick="startChat('${id}')" style="width:100%">Ouvrir la conversation</button>
+                `;
                 list.appendChild(d);
             });
         }
         
-        // === UTILS ===
-        function toast(msg){
-            const t = document.createElement('div'); t.className='toast'; t.textContent=msg;
+        // ============================================================
+        // UTILS
+        // ============================================================
+        function toast(msg) {
+            const t = document.createElement('div');
+            t.className = 'toast';
+            t.textContent = msg;
             document.body.appendChild(t);
-            setTimeout(() => {t.style.opacity='0';setTimeout(()=>t.remove(),300)},2000);
+            setTimeout(() => {
+                t.style.opacity = '0';
+                t.style.transition = 'opacity 0.3s';
+                setTimeout(() => t.remove(), 300);
+            }, 2500);
         }
         
-        // === START ===
+        // ============================================================
+        // START
+        // ============================================================
         init();
+        console.log('🔥 Tinder P2P ready!');
+        console.log('📱 Ton ID:', S.deviceId);
+        console.log('💡 Partage ton ID avec tes amis pour qu\'ils puissent te trouver');
     </script>
 </body>
 </html>
