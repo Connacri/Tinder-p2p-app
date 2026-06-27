@@ -1,0 +1,13 @@
+# Bubblewrap / TWA
+*.keystore
+*.jks
+app-release-unsigned.apk
+app-release-signed.apk
+.aab
+
+# Node
+node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
