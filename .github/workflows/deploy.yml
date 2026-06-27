@@ -1,4 +1,4 @@
-name: Build APK Android (TWA)
+name: Build APK Android
 
 on:
   push:
@@ -25,92 +25,224 @@ jobs:
       - name: 📦 Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
-          sdk-version: 33
-          build-tools-version: 33.0.0
+          sdk-version: 34
+          build-tools-version: 34.0.0
       
-      - name: 🔨 Install Bubblewrap
+      - name: 📥 Download PWA2APK script
         run: |
-          npm install -g @bubblewrap/cli
+          # Télécharger Android Command Line Tools si nécessaire
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" "build-tools;34.0.0" 2>/dev/null || true
       
-      - name: 📝 Create Bubblewrap config
-        run: |
-          cat > bubblewrap.toml << 'EOF'
-          [app]
-          name = "Tinder P2P"
-          packageId = "com.connacri.tinderp2p"
-          displayMode = "standalone"
-          backgroundColor = "#f0f2f5"
-          themeColor = "#1a73e8"
-          startUrl = "https://connacri.github.io/Tinder-p2p-app/"
-          
-          [android]
-          minSdkVersion = 21
-          targetSdkVersion = 33
-          compileSdkVersion = 33
-          
-          [signing]
-          keystore = "debug.keystore"
-          keystorePassword = "android"
-          keyAlias = "androiddebugkey"
-          keyPassword = "android"
-          
-          [icons]
-          icon = "assets/icon-512.png"
-          EOF
-      
-      - name: 🎨 Create icon
-        run: |
-          mkdir -p assets
-          python3 -c "
-          from PIL import Image
-          img = Image.new('RGB', (512, 512), color=(26, 115, 232))
-          # Dessiner un emoji feu simple
-          from PIL import ImageDraw
-          draw = ImageDraw.Draw(img)
-          draw.ellipse([100, 50, 412, 462], fill=(255, 255, 255))
-          draw.text((180, 150), '🔥', font_size=200)
-          img.save('assets/icon-512.png')
-          print('✅ Icône créée')
-          " || python3 -c "
-          # Fallback: créer un PNG minimal
-          import base64
-          png = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPj/HwADBwIAMCbHYQAAAABJRU5ErkJggg==')
-          with open('assets/icon-512.png', 'wb') as f:
-              f.write(png)
-          print('✅ Icône fallback créée')
-          "
-      
-      - name: 🔑 Generate debug keystore
+      - name: 🔑 Generate keystore
         run: |
           keytool -genkey -v \
-            -keystore debug.keystore \
-            -alias androiddebugkey \
-            -storepass android \
-            -keypass android \
+            -keystore release.keystore \
+            -alias tinderp2p \
+            -storepass android123 \
+            -keypass android123 \
             -keyalg RSA \
             -keysize 2048 \
             -validity 10000 \
-            -dname "CN=Android Debug,O=Android,C=US" \
-            2>/dev/null || echo "Keystore already exists"
+            -dname "CN=Connacri, OU=Dev, O=TinderP2P, L=Paris, ST=France, C=FR"
       
-      - name: 🏗️ Build TWA APK (automatisé)
+      - name: 🏗️ Create Android project
         run: |
-          # Répondre "No" automatiquement (on a déjà JDK 17)
-          echo "no" | bubblewrap build
+          # Créer la structure du projet Android
+          mkdir -p app/src/main/java/com/connacri/tinderp2p
+          mkdir -p app/src/main/res/values
+          mkdir -p app/src/main/res/drawable
+          mkdir -p app/src/main/assets
+          
+          # AndroidManifest.xml
+          cat > app/src/main/AndroidManifest.xml << 'MANIFEST'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+              package="com.connacri.tinderp2p">
+              
+              <uses-permission android:name="android.permission.INTERNET" />
+              
+              <application
+                  android:allowBackup="true"
+                  android:icon="@mipmap/ic_launcher"
+                  android:label="Tinder P2P"
+                  android:theme="@style/Theme.AppCompat.NoActionBar"
+                  android:usesCleartextTraffic="true">
+                  
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true"
+                      android:configChanges="orientation|screenSize">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          MANIFEST
+          
+          # MainActivity.java
+          cat > app/src/main/java/com/connacri/tinderp2p/MainActivity.java << 'JAVA'
+          package com.connacri.tinderp2p;
+          
+          import android.app.Activity;
+          import android.os.Bundle;
+          import android.webkit.WebView;
+          import android.webkit.WebViewClient;
+          import android.webkit.WebSettings;
+          
+          public class MainActivity extends Activity {
+              @Override
+              protected void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+                  
+                  WebView webView = new WebView(this);
+                  webView.setWebViewClient(new WebViewClient());
+                  
+                  WebSettings settings = webView.getSettings();
+                  settings.setJavaScriptEnabled(true);
+                  settings.setDomStorageEnabled(true);
+                  settings.setDatabaseEnabled(true);
+                  settings.setAllowFileAccess(true);
+                  
+                  // Activer le P2P WebRTC
+                  settings.setMediaPlaybackRequiresUserGesture(false);
+                  
+                  webView.loadUrl("https://connacri.github.io/Tinder-p2p-app/");
+                  
+                  setContentView(webView);
+              }
+              
+              @Override
+              public void onBackPressed() {
+                  // Gérer le retour
+                  WebView webView = (WebView) findViewById(android.R.id.content);
+                  if (webView != null && webView.canGoBack()) {
+                      webView.goBack();
+                  } else {
+                      super.onBackPressed();
+                  }
+              }
+          }
+          JAVA
+          
+          # Styles
+          cat > app/src/main/res/values/styles.xml << 'STYLES'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <style name="Theme.AppCompat.NoActionBar" parent="Theme.AppCompat.Light.NoActionBar">
+                  <item name="colorPrimary">#1a73e8</item>
+                  <item name="colorPrimaryDark">#1557b0</item>
+                  <item name="colorAccent">#1a73e8</item>
+              </style>
+          </resources>
+          STYLES
+          
+          # Icône (placeholder)
+          cat > app/src/main/res/drawable/ic_launcher.xml << 'ICON'
+          <?xml version="1.0" encoding="utf-8"?>
+          <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+              <background android:drawable="@color/colorPrimary"/>
+              <foreground android:drawable="@color/colorPrimaryDark"/>
+          </adaptive-icon>
+          ICON
+          
+          mkdir -p app/src/main/res/values
+          echo '<?xml version="1.0" encoding="utf-8"?><resources><color name="colorPrimary">#1a73e8</color><color name="colorPrimaryDark">#1557b0</color></resources>' > app/src/main/res/values/colors.xml
+      
+      - name: 📝 Create build.gradle
+        run: |
+          # Root build.gradle
+          cat > build.gradle << 'GRADLE'
+          buildscript {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+              dependencies {
+                  classpath 'com.android.tools.build:gradle:8.1.0'
+              }
+          }
+          
+          allprojects {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          GRADLE
+          
+          # App build.gradle
+          cat > app/build.gradle << 'GRADLE'
+          apply plugin: 'com.android.application'
+          
+          android {
+              namespace 'com.connacri.tinderp2p'
+              compileSdk 34
+              
+              defaultConfig {
+                  applicationId "com.connacri.tinderp2p"
+                  minSdk 21
+                  targetSdk 34
+                  versionCode 1
+                  versionName "1.0.0"
+              }
+              
+              signingConfigs {
+                  release {
+                      storeFile file("../release.keystore")
+                      storePassword "android123"
+                      keyAlias "tinderp2p"
+                      keyPassword "android123"
+                  }
+              }
+              
+              buildTypes {
+                  release {
+                      minifyEnabled false
+                      signingConfig signingConfigs.release
+                  }
+              }
+          }
+          
+          dependencies {
+              implementation 'androidx.appcompat:appcompat:1.6.1'
+          }
+          GRADLE
+          
+          # settings.gradle
+          cat > settings.gradle << 'GRADLE'
+          rootProject.name = "TinderP2P"
+          include ':app'
+          GRADLE
+          
+          # gradle.properties
+          cat > gradle.properties << 'PROPS'
+          org.gradle.jvmargs=-Xmx2048m
+          android.useAndroidX=true
+          PROPS
+      
+      - name: 🔨 Build APK
+        run: |
+          # Installer Gradle wrapper
+          gradle wrapper --gradle-version 8.2
+          
+          # Build
+          ./gradlew assembleRelease
       
       - name: 📋 Find APK
         run: |
-          echo "Recherche des APK..."
+          echo "APK généré :"
           find . -name "*.apk" -type f -exec ls -lh {} \;
       
-      - name: 📤 Upload APK artifact
+      - name: 📤 Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: tinder-p2p-apk
+          name: Tinder-P2P-APK
           path: "**/*.apk"
           retention-days: 30
       
-      - name: 🚀 Create Release (on tag)
+      - name: 🚀 Create Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/v')
         with:
