@@ -1,26 +1,114 @@
-name: Deploy to GitHub Pages
+name: Build APK Android (TWA)
+
 on:
   push:
     branches: [main, master]
   workflow_dispatch:
+
 permissions:
-  contents: read
-  pages: write
-  id-token: write
-concurrency:
-  group: "pages"
-  cancel-in-progress: false
+  contents: write
+
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  build-apk:
     runs-on: ubuntu-latest
+    
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/configure-pages@v4
-      - uses: actions/upload-pages-artifact@v3
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+      
+      - name: 🔧 Setup Java
+        uses: actions/setup-java@v4
         with:
-          path: '.'
-      - id: deployment
-        uses: actions/deploy-pages@v4
+          distribution: 'temurin'
+          java-version: '17'
+      
+      - name: 📦 Setup Android SDK
+        uses: android-actions/setup-android@v3
+      
+      - name: 🔨 Install Bubblewrap (TWA builder)
+        run: |
+          npm install -g @bubblewrap/cli
+      
+      - name: 📝 Generate Bubblewrap config
+        run: |
+          cat > bubblewrap.toml << 'EOF'
+          # Configuration TWA pour Tinder P2P
+          [app]
+          name = "Tinder P2P"
+          packageId = "com.connacri.tinderp2p"
+          displayMode = "standalone"
+          backgroundColor = "#f0f2f5"
+          themeColor = "#1a73e8"
+          startUrl = "https://connacri.github.io/Tinder-p2p-app/"
+          
+          [android]
+          minSdkVersion = 21
+          targetSdkVersion = 33
+          compileSdkVersion = 33
+          
+          [signing]
+          # Debug keystore (à remplacer pour la release)
+          keystore = "debug.keystore"
+          keystorePassword = "android"
+          keyAlias = "androiddebugkey"
+          keyPassword = "android"
+          
+          [icons]
+          # Icônes générées automatiquement
+          icon = "assets/icon-512.png"
+          EOF
+      
+      - name: 🎨 Create default icon
+        run: |
+          mkdir -p assets
+          # Créer une icône PNG simple (200x200)
+          python3 -c "
+          import base64, os
+          # PNG minimal 1x1 rouge (sera remplacé par une vraie icône)
+          png_data = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAAACXBIWXMAAAsTAAALEwEAmpwYAAABaWlDQ1BEaXNwbGF5IFAzAAB4nHWQvUvDUBTFT6tS0DqIDh0cMolD1NIKdnFoKxRFMFQFq1OafgltfCQpUnETVyn4H1jBWXCwiFRYxUXBWxBA4hONxQU0f/G+3nv3veeec+9BUJ5mWZRlmV9kS0opZ5VS6qO8rKy0UlmUrLJA86+L8rLy8mKl6N9v7a79/P7+fn6H0DRNwzAMYF3XdSiK4p/nec7zPE+SJI/necp1Hcc0TcMwDERRFCdJkiJJkiTLsixJkiTL84EgCAKCIbRZrKrVWq1Wq/V6vdlst9vtTqfT6XQ6nU6n0+l0u91ud7vdbne73e/3B4PhcDgcDofD4XA4HA6Hw+FwOBwOh8PhcDgcDofD4XA4HA6Hw+FwOBwOh8PhcDgcDofD4XA4HA6Hw+FwOBwOh8PhcDgcDofD4XA4HA6Hw+FwOBwOh8PhcDgcDofD4XA4HA6Hw+FwOBwOh8PhcDgcDofD4XA4HA6Hw+FwOBwOh8PhcDgcDofD4XA4HA6Hw+FwOBwOh8PhcDgcDofD4XA4HA6Hw+FwOBwOh8PhcDgcDofD4XA4HA6Hw+FwOBwOh8PhcDgcD4fDA9frAgAA//8AAP//AAAA//8AAP//AAAA//8=')  
+          with open('assets/icon-512.png', 'wb') as f:
+              f.write(png_data)
+          print('✅ Icône créée')
+          " 2>/dev/null || echo "⚠️ Python non disponible"
+      
+      - name: 🔑 Generate debug keystore
+        run: |
+          keytool -genkey -v \
+            -keystore debug.keystore \
+            -alias androiddebugkey \
+            -storepass android \
+            -keypass android \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US" \
+            2>/dev/null || echo "Keystore exists"
+      
+      - name: 🏗️ Build TWA APK
+        run: |
+          bubblewrap build
+      
+      - name: 📋 List generated files
+        run: |
+          echo "Fichiers générés :"
+          find . -name "*.apk" -type f
+          find . -name "*.aab" -type f
+      
+      - name: 📤 Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tinder-p2p-apk
+          path: |
+            app-release-signed.apk
+            app-release-unsigned.apk
+            *.apk
+          retention-days: 30
+      
+      - name: 🚀 Create Release (on tag)
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          files: "*.apk"
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
