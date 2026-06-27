@@ -704,12 +704,429 @@
 </head>
 <body>
     <div id="app">
-        <!-- Le reste du HTML reste identique -->
+        <!-- Écran Profil -->
+        <main id="profile-screen" class="screen active">
+            <div class="header">
+                <h2>👤 Mon Profil</h2>
+                <span id="profile-status" class="online-badge">
+                    <span class="status-dot online"></span> En ligne
+                </span>
+            </div>
+            <div class="profile-img-container">
+                <div class="profile-img" id="profile-img-preview">😊</div>
+                <div class="profile-img-overlay" id="change-avatar-btn">📷</div>
+            </div>
+            <div class="input-group">
+                <input type="text" id="profile-name" placeholder="Ton prénom" maxlength="30">
+            </div>
+            <div class="input-group">
+                <textarea id="profile-bio" placeholder="Ta bio..." maxlength="150"></textarea>
+            </div>
+            <button class="btn-main" id="save-profile-btn">💾 Sauvegarder le profil</button>
+            <div class="id-box">
+                <strong>🔑 Ton ID unique :</strong>
+                <span id="my-peer-id">Génération en cours...</span>
+                <button class="share-btn" id="copy-id-btn">📋 Copier</button>
+                <button class="share-btn" id="share-id-btn">📤 Partager</button>
+            </div>
+        </main>
+
+        <!-- Écran Découvrir -->
+        <main id="discover-screen" class="screen">
+            <div class="header">
+                <h2>🔍 Découvrir</h2>
+                <button class="btn btn-on" id="toggle-discover-btn">ON</button>
+            </div>
+            <div class="input-group">
+                <input type="text" id="peer-id-input" placeholder="Colle l'ID d'un profil ici...">
+            </div>
+            <button class="btn-main" id="connect-btn">🔗 Se connecter</button>
+            <div id="discover-list"></div>
+        </main>
+
+        <!-- Écran Matches -->
+        <main id="matches-screen" class="screen">
+            <div class="header">
+                <h2>💝 Mes Matchs</h2>
+            </div>
+            <div id="matches-list"></div>
+        </main>
+
+        <!-- Écran Chat (overlay) -->
+        <div id="chat-overlay" class="chat-overlay">
+            <div class="chat-header">
+                <button id="close-chat-btn">←</button>
+                <h3 id="chat-peer-name">Chat</h3>
+            </div>
+            <div class="chat-msgs" id="chat-messages"></div>
+            <div class="chat-input">
+                <input type="text" id="chat-input-field" placeholder="Écris un message..." maxlength="300">
+                <button id="send-msg-btn">➤</button>
+            </div>
+        </div>
+
+        <!-- Navigation -->
+        <nav>
+            <button class="active" data-screen="profile">
+                👤 <span>Profil</span>
+            </button>
+            <button data-screen="discover">
+                🔍 <span>Découvrir</span>
+            </button>
+            <button data-screen="matches">
+                💝 <span>Matchs</span>
+            </button>
+        </nav>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bugout@0.0.10/index.js"></script>
     <script>
-        // Le JavaScript reste identique
+        // === Données globales ===
+        const STATE = {
+            myPeerId: '',
+            profile: { name: '', bio: '', avatar: '😊' },
+            isDiscoverable: false,
+            matches: {},      // { peerId: { name, bio, avatar, messages: [], starred: false } }
+            currentChatPeer: null,
+            bugout: null
+        };
+
+        // === Utilitaires ===
+        function $(sel) { return document.querySelector(sel); }
+        function $$(sel) { return document.querySelectorAll(sel); }
+
+        function showToast(msg) {
+            const t = document.createElement('div');
+            t.className = 'toast';
+            t.textContent = msg;
+            document.body.appendChild(t);
+            setTimeout(() => t.remove(), 2500);
+        }
+
+        function now() {
+            const d = new Date();
+            return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+        }
+
+        // === Navigation ===
+        $$('nav button').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const screen = btn.dataset.screen;
+                $$('nav button').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                $$('main.screen').forEach(s => s.classList.remove('active'));
+                $(`#${screen}-screen`).classList.add('active');
+                if (screen === 'matches') renderMatches();
+                if (screen === 'discover') renderDiscover();
+            });
+        });
+
+        // === Génération ID + Bugout ===
+        async function initBugout() {
+            try {
+                STATE.bugout = new Bugout();
+                STATE.myPeerId = STATE.bugout.address();
+                $('#my-peer-id').textContent = STATE.myPeerId;
+                console.log('🟢 Bugout initialisé. ID:', STATE.myPeerId);
+            } catch(e) {
+                console.error('Erreur Bugout:', e);
+                $('#my-peer-id').textContent = 'Erreur. Recharge la page.';
+            }
+        }
+
+        // === Profil ===
+        function loadProfile() {
+            const saved = localStorage.getItem('tinderp2p_profile');
+            if (saved) {
+                try {
+                    const p = JSON.parse(saved);
+                    STATE.profile = p;
+                    $('#profile-name').value = p.name || '';
+                    $('#profile-bio').value = p.bio || '';
+                    $('#profile-img-preview').textContent = p.avatar || '😊';
+                } catch(e) {}
+            }
+        }
+
+        $('#save-profile-btn').addEventListener('click', () => {
+            STATE.profile.name = $('#profile-name').value.trim();
+            STATE.profile.bio = $('#profile-bio').value.trim();
+            if (!STATE.profile.name) return showToast('⚠️ Entre au moins un prénom');
+            localStorage.setItem('tinderp2p_profile', JSON.stringify(STATE.profile));
+            showToast('✅ Profil sauvegardé !');
+        });
+
+        $('#change-avatar-btn').addEventListener('click', () => {
+            const avatars = ['😊','😎','🥳','🤩','😇','🦊','🐱','🐶','🦄','🐼','🌸','🔥','💎','🍕','🎸','⚽'];
+            const current = STATE.profile.avatar || '😊';
+            let idx = avatars.indexOf(current);
+            idx = (idx + 1) % avatars.length;
+            STATE.profile.avatar = avatars[idx];
+            $('#profile-img-preview').textContent = avatars[idx];
+            showToast(`Avatar changé : ${avatars[idx]}`);
+        });
+
+        // === Découvrabilité ===
+        $('#toggle-discover-btn').addEventListener('click', () => {
+            STATE.isDiscoverable = !STATE.isDiscoverable;
+            const btn = $('#toggle-discover-btn');
+            if (STATE.isDiscoverable) {
+                btn.textContent = 'ON';
+                btn.className = 'btn btn-on';
+                if (STATE.bugout) {
+                    STATE.bugout.on('ping', handlePing);
+                    STATE.bugout.on('pong', handlePong);
+                }
+                showToast('📡 Tu es visible ! Les autres peuvent te trouver.');
+            } else {
+                btn.textContent = 'OFF';
+                btn.className = 'btn btn-off';
+                if (STATE.bugout) {
+                    STATE.bugout.removeListener('ping', handlePing);
+                    STATE.bugout.removeListener('pong', handlePong);
+                }
+                showToast('🔒 Tu es invisible.');
+            }
+        });
+
+        // === Connexion manuelle ===
+        $('#connect-btn').addEventListener('click', () => {
+            const peerId = $('#peer-id-input').value.trim();
+            if (!peerId) return showToast('⚠️ Entre un ID');
+            if (peerId === STATE.myPeerId) return showToast('⚠️ C\'est ton propre ID !');
+            connectToPeer(peerId);
+        });
+
+        function connectToPeer(peerId) {
+            if (!STATE.bugout) return showToast('⏳ Pas encore prêt, attends un peu...');
+            if (STATE.matches[peerId]) return showToast('💬 Déjà en contact avec cette personne !');
+
+            STATE.bugout.send(peerId, { type: 'ping', profile: STATE.profile });
+            showToast('🔍 Recherche du profil...');
+
+            // Écouter la réponse
+            function onPong(address, data) {
+                if (address === peerId && data.type === 'pong') {
+                    STATE.bugout.removeListener('pong', onPong);
+                    addMatch(peerId, data.profile);
+                    showToast('🎉 Profil trouvé !');
+                }
+            }
+            STATE.bugout.on('pong', onPong);
+
+            // Timeout
+            setTimeout(() => {
+                STATE.bugout.removeListener('pong', onPong);
+                if (!STATE.matches[peerId]) showToast('❌ Personne trouvée avec cet ID.');
+            }, 8000);
+        }
+
+        // === Gestion Ping/Pong ===
+        function handlePing(address, data) {
+            if (!STATE.isDiscoverable) return;
+            if (STATE.matches[address]) return;
+            STATE.bugout.send(address, { type: 'pong', profile: STATE.profile });
+            addMatch(address, data.profile);
+            showToast(`💌 ${data.profile.name || 'Quelqu\'un'} t'a trouvé !`);
+        }
+
+        function handlePong(address, data) {
+            // Géré dans connectToPeer
+        }
+
+        // === Matchs ===
+        function addMatch(peerId, profile) {
+            STATE.matches[peerId] = {
+                name: profile.name || 'Anonyme',
+                bio: profile.bio || '',
+                avatar: profile.avatar || '😊',
+                messages: [],
+                starred: false
+            };
+            saveMatches();
+            renderMatches();
+        }
+
+        function saveMatches() {
+            localStorage.setItem('tinderp2p_matches', JSON.stringify(STATE.matches));
+        }
+
+        function loadMatches() {
+            const saved = localStorage.getItem('tinderp2p_matches');
+            if (saved) {
+                try { STATE.matches = JSON.parse(saved); } catch(e) {}
+            }
+        }
+
+        function renderMatches() {
+            const container = $('#matches-list');
+            const ids = Object.keys(STATE.matches);
+            if (ids.length === 0) {
+                container.innerHTML = '<div class="empty">💔 Aucun match pour le moment.<br>Va dans "Découvrir" !</div>';
+                return;
+            }
+            container.innerHTML = ids.map(id => {
+                const m = STATE.matches[id];
+                const lastMsg = m.messages.length ? m.messages[m.messages.length-1].text : 'Pas encore de messages';
+                return `
+                <div class="card">
+                    <div class="card-row">
+                        <div class="card-img">${m.avatar}</div>
+                        <div class="card-info">
+                            <h3>${m.name} ${m.starred ? '⭐' : ''}</h3>
+                            <p>${lastMsg.substring(0, 50)}</p>
+                            <small style="color:var(--text-secondary)">ID: ${id.substring(0, 12)}...</small>
+                        </div>
+                    </div>
+                    <div class="card-btns">
+                        <button class="btn-chat" data-peer="${id}">💬 Chat</button>
+                        <button class="btn-star" data-peer="${id}">${m.starred ? '⭐' : '☆'}</button>
+                    </div>
+                </div>`;
+            }).join('');
+
+            // Event listeners pour les boutons
+            container.querySelectorAll('.btn-chat').forEach(btn => {
+                btn.addEventListener('click', () => openChat(btn.dataset.peer));
+            });
+            container.querySelectorAll('.btn-star').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const peer = btn.dataset.peer;
+                    STATE.matches[peer].starred = !STATE.matches[peer].starred;
+                    saveMatches();
+                    renderMatches();
+                });
+            });
+        }
+
+        // === Découvrir (liste des connectés) ===
+        function renderDiscover() {
+            const container = $('#discover-list');
+            const ids = Object.keys(STATE.matches);
+            if (ids.length === 0) {
+                container.innerHTML = '<div class="empty">🔍 Entre un ID pour te connecter<br>ou active la découverte !</div>';
+                return;
+            }
+            container.innerHTML = '<h3 style="margin:20px 0 10px;color:var(--text-secondary)">Profils connectés :</h3>' +
+                ids.map(id => {
+                    const m = STATE.matches[id];
+                    return `
+                    <div class="card">
+                        <div class="card-row">
+                            <div class="card-img">${m.avatar}</div>
+                            <div class="card-info">
+                                <h3>${m.name}</h3>
+                                <p>${m.bio || 'Pas de bio'}</p>
+                            </div>
+                        </div>
+                        <div class="card-btns">
+                            <button class="btn-chat" data-peer="${id}">💬 Chat</button>
+                        </div>
+                    </div>`;
+                }).join('');
+
+            container.querySelectorAll('.btn-chat').forEach(btn => {
+                btn.addEventListener('click', () => openChat(btn.dataset.peer));
+            });
+        }
+
+        // === Chat ===
+        function openChat(peerId) {
+            STATE.currentChatPeer = peerId;
+            const m = STATE.matches[peerId];
+            $('#chat-peer-name').textContent = `💬 ${m.name}`;
+            $('#chat-messages').innerHTML = m.messages.map(msg => {
+                const cls = msg.sent ? 'sent' : 'recv';
+                return `<div class="msg ${cls}">${msg.text}<time>${msg.time}</time></div>`;
+            }).join('');
+            $('#chat-overlay').style.display = 'flex';
+            scrollChatBottom();
+
+            // Écouter les messages entrants
+            if (STATE.bugout) {
+                STATE.bugout.on('message', handleIncomingMessage);
+            }
+        }
+
+        function closeChat() {
+            $('#chat-overlay').style.display = 'none';
+            STATE.currentChatPeer = null;
+            if (STATE.bugout) {
+                STATE.bugout.removeListener('message', handleIncomingMessage);
+            }
+            renderMatches();
+        }
+
+        $('#close-chat-btn').addEventListener('click', closeChat);
+
+        $('#send-msg-btn').addEventListener('click', sendMessage);
+        $('#chat-input-field').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        function sendMessage() {
+            const text = $('#chat-input-field').value.trim();
+            if (!text || !STATE.currentChatPeer || !STATE.bugout) return;
+
+            const msg = { text, time: now(), sent: true };
+            STATE.matches[STATE.currentChatPeer].messages.push(msg);
+            saveMatches();
+
+            STATE.bugout.send(STATE.currentChatPeer, { type: 'message', text });
+
+            $('#chat-messages').innerHTML += 
+                `<div class="msg sent">${text}<time>${msg.time}</time></div>`;
+            $('#chat-input-field').value = '';
+            scrollChatBottom();
+        }
+
+        function handleIncomingMessage(address, data) {
+            if (address !== STATE.currentChatPeer || data.type !== 'message') return;
+            const msg = { text: data.text, time: now(), sent: false };
+            STATE.matches[address].messages.push(msg);
+            saveMatches();
+
+            $('#chat-messages').innerHTML += 
+                `<div class="msg recv">${data.text}<time>${msg.time}</time></div>`;
+            scrollChatBottom();
+        }
+
+        function scrollChatBottom() {
+            const msgs = $('#chat-messages');
+            setTimeout(() => { msgs.scrollTop = msgs.scrollHeight; }, 100);
+        }
+
+        // === ID Copy / Share ===
+        $('#copy-id-btn').addEventListener('click', () => {
+            if (!STATE.myPeerId) return;
+            navigator.clipboard.writeText(STATE.myPeerId)
+                .then(() => showToast('📋 ID copié dans le presse-papier !'))
+                .catch(() => showToast('❌ Erreur de copie.'));
+        });
+
+        $('#share-id-btn').addEventListener('click', () => {
+            if (!STATE.myPeerId) return;
+            if (navigator.share) {
+                navigator.share({
+                    title: '🔥 Mon ID Tinder P2P',
+                    text: `Voici mon ID Tinder P2P : ${STATE.myPeerId}`,
+                }).catch(() => {});
+            } else {
+                navigator.clipboard.writeText(STATE.myPeerId)
+                    .then(() => showToast('📋 ID copié (partage non supporté)'))
+                    .catch(() => showToast('❌ Erreur'));
+            }
+        });
+
+        // === Init ===
+        async function init() {
+            loadProfile();
+            loadMatches();
+            await initBugout();
+            renderMatches();
+        }
+
+        init();
     </script>
 </body>
 </html>
