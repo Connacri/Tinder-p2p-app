@@ -16,8 +16,8 @@
             --text: #1C1C1E;
             --text-secondary: #636366;
             --border: #E5E5EA;
-            --shadow: 0 4px 16px rgba(0,0,0,0.08);
             --radius: 16px;
+            --shadow: 0 4px 16px rgba(0,0,0,0.08);
         }
         * { margin:0; padding:0; box-sizing:border-box; }
         body {
@@ -276,7 +276,6 @@
                     $('#display-peer-id').textContent = fallback;
                     $('#network-status').textContent = '🟠 Mode local (WebRTC non disponible)';
                     console.warn('Bugout n’a pas fourni d’adresse, fallback ID:', fallback);
-                    // On peut toujours discuter via l'ID local (échange manuel)
                     setupFallbackListeners();
                     resolve(fallback);
                 }
@@ -313,8 +312,6 @@
     }
 
     function setupFallbackListeners() {
-        // En mode local, on ne peut pas recevoir de messages sans serveur de signalisation.
-        // On peut toutefois gérer les messages locaux si on les reçoit (peu probable).
         console.log('Mode fallback – connexion manuelle uniquement');
     }
 
@@ -347,7 +344,6 @@
         if (!STATE.bugout) return toast('❌ Pas de connexion réseau');
         STATE.bugout.send(peerId, { type: 'ping', profile: STATE.profile });
         toast('🔍 Recherche...');
-        // Timeout
         setTimeout(() => {
             if (!STATE.matches[peerId]) toast('❌ Personne trouvée avec cet ID');
         }, 8000);
@@ -437,7 +433,6 @@
         }).join('');
         document.getElementById('chat-overlay').style.display = 'flex';
         $('#input-message').focus();
-        // Marquer comme lu
         if (m.unread) {
             m.unread = 0;
             saveMatches();
@@ -463,11 +458,9 @@
         const msg = { text, time: new Date().toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'}), sent: true };
         STATE.matches[STATE.currentChatPeer].messages.push(msg);
         saveMatches();
-        // Afficher
         $('#chat-messages').innerHTML += `<div style="padding:10px 14px;border-radius:18px;margin:4px 0;max-width:75%;background:#FF4458;color:white;align-self:flex-end;">${text}<br><small>${msg.time}</small></div>`;
         $('#input-message').value = '';
         $('#chat-messages').scrollTop = $('#chat-messages').scrollHeight;
-        // Envoyer via Bugout
         if (STATE.bugout) {
             STATE.bugout.send(STATE.currentChatPeer, { type: 'message', text });
         }
@@ -480,7 +473,6 @@
         STATE.matches[peerId].unread = (STATE.matches[peerId].unread || 0) + 1;
         saveMatches();
         if (STATE.currentChatPeer === peerId) {
-            // Afficher en direct
             $('#chat-messages').innerHTML += `<div style="padding:10px 14px;border-radius:18px;margin:4px 0;max-width:75%;background:white;border:1px solid #ddd;">${text}<br><small>${msg.time}</small></div>`;
             $('#chat-messages').scrollTop = $('#chat-messages').scrollHeight;
             STATE.matches[peerId].unread = 0;
