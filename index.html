@@ -248,6 +248,10 @@
             box-shadow: var(--shadow-md);
             transition: transform 0.3s ease;
             background: linear-gradient(135deg, #667eea, #764ba2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 64px;
         }
 
         .profile-img:hover {
@@ -788,7 +792,9 @@
             isDiscoverable: false,
             matches: {},      // { peerId: { name, bio, avatar, messages: [], starred: false } }
             currentChatPeer: null,
-            bugout: null
+            bugout: null,
+            connectedPeers: new Set(), // Pour éviter les doublons
+            connectionTimeouts: new Map() // Pour gérer les timeouts
         };
 
         // === Utilitaires ===
@@ -796,16 +802,28 @@
         function $$(sel) { return document.querySelectorAll(sel); }
 
         function showToast(msg) {
+            const existingToast = document.querySelector('.toast');
+            if (existingToast) existingToast.remove();
+            
             const t = document.createElement('div');
             t.className = 'toast';
             t.textContent = msg;
             document.body.appendChild(t);
-            setTimeout(() => t.remove(), 2500);
+            setTimeout(() => {
+                if (t.parentNode) t.remove();
+            }, 3000);
         }
 
         function now() {
             const d = new Date();
             return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+        }
+
+        // Générer un ID unique cryptographique
+        function generateSecureId() {
+            const array = new Uint32Array(8);
+            crypto.getRandomValues(array);
+            return Array.from(array, dec => dec.toString(16).padStart(8, '0')).join('');
         }
 
         // === Navigation ===
@@ -823,37 +841,91 @@
 
         // === Génération ID + Bugout ===
         async function initBugout() {
-            try {
-                STATE.bugout = new Bugout();
-                STATE.myPeerId = STATE.bugout.address();
-                $('#my-peer-id').textContent = STATE.myPeerId;
-                console.log('🟢 Bugout initialisé. ID:', STATE.myPeerId);
-            } catch(e) {
-                console.error('Erreur Bugout:', e);
-                $('#my-peer-id').textContent = 'Erreur. Recharge la page.';
-            }
+            return new Promise((resolve, reject) => {
+                try {
+                    // Vérifier si Bugout est disponible
+                    if (typeof Bugout === 'undefined') {
+                        throw new Error('Bugout library not loaded');
+                    }
+
+                    STATE.bugout = new Bugout();
+                    
+                    // Attendre que l'adresse soit générée
+                    const checkAddress = setInterval(() => {
+                        const address = STATE.bugout.address();
+                        if (address) {
+                            clearInterval(checkAddress);
+                            STATE.myPeerId = address;
+                            $('#my-peer-id').textContent = address;
+                            console.log('🟢 Bugout initialisé. ID:', address);
+                            
+                            // Configurer les écouteurs par défaut
+                            setupDefaultListeners();
+                            resolve(address);
+                        }
+                    }, 100);
+
+                    // Timeout si l'adresse n'est pas générée
+                    setTimeout(() => {
+                        clearInterval(checkAddress);
+                        reject(new Error('Timeout generating address'));
+                    }, 10000);
+
+                } catch(e) {
+                    console.error('Erreur Bugout:', e);
+                    $('#my-peer-id').textContent = 'Erreur. Recharge la page.';
+                    reject(e);
+                }
+            });
+        }
+
+        function setupDefaultListeners() {
+            if (!STATE.bugout) return;
+            
+            // Écouter les connexions entrantes
+            STATE.bugout.on('seen', (address) => {
+                console.log('👀 Vu:', address);
+                if (STATE.isDiscoverable && !STATE.connectedPeers.has(address)) {
+                    STATE.connectedPeers.add(address);
+                }
+            });
+
+            // Gérer les erreurs
+            STATE.bugout.on('error', (error) => {
+                console.error('Bugout error:', error);
+            });
         }
 
         // === Profil ===
         function loadProfile() {
-            const saved = localStorage.getItem('tinderp2p_profile');
-            if (saved) {
-                try {
+            try {
+                const saved = localStorage.getItem('tinderp2p_profile');
+                if (saved) {
                     const p = JSON.parse(saved);
                     STATE.profile = p;
                     $('#profile-name').value = p.name || '';
                     $('#profile-bio').value = p.bio || '';
                     $('#profile-img-preview').textContent = p.avatar || '😊';
-                } catch(e) {}
+                }
+            } catch(e) {
+                console.error('Error loading profile:', e);
+                localStorage.removeItem('tinderp2p_profile');
             }
         }
 
         $('#save-profile-btn').addEventListener('click', () => {
-            STATE.profile.name = $('#profile-name').value.trim();
+            const name = $('#profile-name').value.trim();
+            if (!name) return showToast('⚠️ Entre au moins un prénom');
+            
+            STATE.profile.name = name;
             STATE.profile.bio = $('#profile-bio').value.trim();
-            if (!STATE.profile.name) return showToast('⚠️ Entre au moins un prénom');
-            localStorage.setItem('tinderp2p_profile', JSON.stringify(STATE.profile));
-            showToast('✅ Profil sauvegardé !');
+            
+            try {
+                localStorage.setItem('tinderp2p_profile', JSON.stringify(STATE.profile));
+                showToast('✅ Profil sauvegardé !');
+            } catch(e) {
+                showToast('❌ Erreur de sauvegarde');
+            }
         });
 
         $('#change-avatar-btn').addEventListener('click', () => {
@@ -868,113 +940,186 @@
 
         // === Découvrabilité ===
         $('#toggle-discover-btn').addEventListener('click', () => {
+            if (!STATE.bugout) {
+                return showToast('⏳ Système pas encore prêt...');
+            }
+            
             STATE.isDiscoverable = !STATE.isDiscoverable;
             const btn = $('#toggle-discover-btn');
+            
             if (STATE.isDiscoverable) {
                 btn.textContent = 'ON';
                 btn.className = 'btn btn-on';
-                if (STATE.bugout) {
-                    STATE.bugout.on('ping', handlePing);
-                    STATE.bugout.on('pong', handlePong);
-                }
+                setupDiscoverableListeners();
                 showToast('📡 Tu es visible ! Les autres peuvent te trouver.');
             } else {
                 btn.textContent = 'OFF';
                 btn.className = 'btn btn-off';
-                if (STATE.bugout) {
-                    STATE.bugout.removeListener('ping', handlePing);
-                    STATE.bugout.removeListener('pong', handlePong);
-                }
+                removeDiscoverableListeners();
                 showToast('🔒 Tu es invisible.');
             }
         });
+
+        function setupDiscoverableListeners() {
+            if (!STATE.bugout) return;
+            STATE.bugout.on('ping', handlePing);
+            STATE.bugout.on('pong', handlePong);
+        }
+
+        function removeDiscoverableListeners() {
+            if (!STATE.bugout) return;
+            STATE.bugout.removeListener('ping', handlePing);
+            STATE.bugout.removeListener('pong', handlePong);
+        }
 
         // === Connexion manuelle ===
         $('#connect-btn').addEventListener('click', () => {
             const peerId = $('#peer-id-input').value.trim();
             if (!peerId) return showToast('⚠️ Entre un ID');
             if (peerId === STATE.myPeerId) return showToast('⚠️ C\'est ton propre ID !');
+            if (STATE.matches[peerId]) return showToast('💬 Déjà en contact avec cette personne !');
+            
             connectToPeer(peerId);
         });
 
         function connectToPeer(peerId) {
             if (!STATE.bugout) return showToast('⏳ Pas encore prêt, attends un peu...');
-            if (STATE.matches[peerId]) return showToast('💬 Déjà en contact avec cette personne !');
-
-            STATE.bugout.send(peerId, { type: 'ping', profile: STATE.profile });
+            
             showToast('🔍 Recherche du profil...');
+            
+            // Envoyer ping
+            try {
+                STATE.bugout.send(peerId, { 
+                    type: 'ping', 
+                    profile: STATE.profile,
+                    timestamp: Date.now()
+                });
+            } catch(e) {
+                console.error('Error sending ping:', e);
+                showToast('❌ Erreur de connexion');
+                return;
+            }
 
-            // Écouter la réponse
+            // Écouter la réponse avec timeout
+            const timeout = setTimeout(() => {
+                STATE.bugout.removeListener('pong', onPong);
+                STATE.connectionTimeouts.delete(peerId);
+                if (!STATE.matches[peerId]) {
+                    showToast('❌ Personne trouvée avec cet ID.');
+                }
+            }, 10000);
+
+            STATE.connectionTimeouts.set(peerId, timeout);
+
             function onPong(address, data) {
                 if (address === peerId && data.type === 'pong') {
+                    clearTimeout(timeout);
                     STATE.bugout.removeListener('pong', onPong);
+                    STATE.connectionTimeouts.delete(peerId);
                     addMatch(peerId, data.profile);
                     showToast('🎉 Profil trouvé !');
                 }
             }
-            STATE.bugout.on('pong', onPong);
 
-            // Timeout
-            setTimeout(() => {
-                STATE.bugout.removeListener('pong', onPong);
-                if (!STATE.matches[peerId]) showToast('❌ Personne trouvée avec cet ID.');
-            }, 8000);
+            STATE.bugout.on('pong', onPong);
         }
 
         // === Gestion Ping/Pong ===
         function handlePing(address, data) {
             if (!STATE.isDiscoverable) return;
             if (STATE.matches[address]) return;
-            STATE.bugout.send(address, { type: 'pong', profile: STATE.profile });
-            addMatch(address, data.profile);
-            showToast(`💌 ${data.profile.name || 'Quelqu\'un'} t'a trouvé !`);
+            
+            console.log('📩 Ping reçu de:', address);
+            
+            try {
+                STATE.bugout.send(address, { 
+                    type: 'pong', 
+                    profile: STATE.profile,
+                    timestamp: Date.now()
+                });
+                addMatch(address, data.profile);
+                showToast(`💌 ${data.profile.name || 'Quelqu\'un'} t'a trouvé !`);
+            } catch(e) {
+                console.error('Error sending pong:', e);
+            }
         }
 
         function handlePong(address, data) {
             // Géré dans connectToPeer
+            console.log('📨 Pong reçu de:', address);
         }
 
         // === Matchs ===
         function addMatch(peerId, profile) {
+            if (STATE.matches[peerId]) return;
+            
             STATE.matches[peerId] = {
                 name: profile.name || 'Anonyme',
                 bio: profile.bio || '',
                 avatar: profile.avatar || '😊',
                 messages: [],
-                starred: false
+                starred: false,
+                connectedAt: Date.now()
             };
+            
+            STATE.connectedPeers.add(peerId);
             saveMatches();
             renderMatches();
         }
 
         function saveMatches() {
-            localStorage.setItem('tinderp2p_matches', JSON.stringify(STATE.matches));
+            try {
+                // Sauvegarder sans les données trop volumineuses
+                const matchesToSave = {};
+                Object.keys(STATE.matches).forEach(id => {
+                    matchesToSave[id] = {
+                        ...STATE.matches[id],
+                        messages: STATE.matches[id].messages.slice(-100) // Garder les 100 derniers messages
+                    };
+                });
+                localStorage.setItem('tinderp2p_matches', JSON.stringify(matchesToSave));
+            } catch(e) {
+                console.error('Error saving matches:', e);
+            }
         }
 
         function loadMatches() {
-            const saved = localStorage.getItem('tinderp2p_matches');
-            if (saved) {
-                try { STATE.matches = JSON.parse(saved); } catch(e) {}
+            try {
+                const saved = localStorage.getItem('tinderp2p_matches');
+                if (saved) {
+                    STATE.matches = JSON.parse(saved);
+                    // Restaurer les IDs connectés
+                    Object.keys(STATE.matches).forEach(id => {
+                        STATE.connectedPeers.add(id);
+                    });
+                }
+            } catch(e) {
+                console.error('Error loading matches:', e);
+                localStorage.removeItem('tinderp2p_matches');
+                STATE.matches = {};
             }
         }
 
         function renderMatches() {
             const container = $('#matches-list');
+            if (!container) return;
+            
             const ids = Object.keys(STATE.matches);
             if (ids.length === 0) {
                 container.innerHTML = '<div class="empty">💔 Aucun match pour le moment.<br>Va dans "Découvrir" !</div>';
                 return;
             }
+            
             container.innerHTML = ids.map(id => {
                 const m = STATE.matches[id];
                 const lastMsg = m.messages.length ? m.messages[m.messages.length-1].text : 'Pas encore de messages';
                 return `
                 <div class="card">
                     <div class="card-row">
-                        <div class="card-img">${m.avatar}</div>
+                        <div class="card-img">${m.avatar || '😊'}</div>
                         <div class="card-info">
-                            <h3>${m.name} ${m.starred ? '⭐' : ''}</h3>
-                            <p>${lastMsg.substring(0, 50)}</p>
+                            <h3>${m.name || 'Anonyme'} ${m.starred ? '⭐' : ''}</h3>
+                            <p>${escapeHtml(lastMsg.substring(0, 50))}</p>
                             <small style="color:var(--text-secondary)">ID: ${id.substring(0, 12)}...</small>
                         </div>
                     </div>
@@ -989,34 +1134,51 @@
             container.querySelectorAll('.btn-chat').forEach(btn => {
                 btn.addEventListener('click', () => openChat(btn.dataset.peer));
             });
+            
             container.querySelectorAll('.btn-star').forEach(btn => {
                 btn.addEventListener('click', () => {
                     const peer = btn.dataset.peer;
-                    STATE.matches[peer].starred = !STATE.matches[peer].starred;
-                    saveMatches();
-                    renderMatches();
+                    if (STATE.matches[peer]) {
+                        STATE.matches[peer].starred = !STATE.matches[peer].starred;
+                        saveMatches();
+                        renderMatches();
+                    }
                 });
             });
+        }
+
+        function escapeHtml(text) {
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return text.replace(/[&<>"']/g, m => map[m]);
         }
 
         // === Découvrir (liste des connectés) ===
         function renderDiscover() {
             const container = $('#discover-list');
+            if (!container) return;
+            
             const ids = Object.keys(STATE.matches);
             if (ids.length === 0) {
                 container.innerHTML = '<div class="empty">🔍 Entre un ID pour te connecter<br>ou active la découverte !</div>';
                 return;
             }
+            
             container.innerHTML = '<h3 style="margin:20px 0 10px;color:var(--text-secondary)">Profils connectés :</h3>' +
                 ids.map(id => {
                     const m = STATE.matches[id];
                     return `
                     <div class="card">
                         <div class="card-row">
-                            <div class="card-img">${m.avatar}</div>
+                            <div class="card-img">${m.avatar || '😊'}</div>
                             <div class="card-info">
-                                <h3>${m.name}</h3>
-                                <p>${m.bio || 'Pas de bio'}</p>
+                                <h3>${m.name || 'Anonyme'}</h3>
+                                <p>${escapeHtml(m.bio || 'Pas de bio')}</p>
                             </div>
                         </div>
                         <div class="card-btns">
@@ -1032,13 +1194,17 @@
 
         // === Chat ===
         function openChat(peerId) {
+            if (!STATE.matches[peerId]) return showToast('❌ Contact introuvable');
+            
             STATE.currentChatPeer = peerId;
             const m = STATE.matches[peerId];
-            $('#chat-peer-name').textContent = `💬 ${m.name}`;
+            
+            $('#chat-peer-name').textContent = `💬 ${m.name || 'Anonyme'}`;
             $('#chat-messages').innerHTML = m.messages.map(msg => {
                 const cls = msg.sent ? 'sent' : 'recv';
-                return `<div class="msg ${cls}">${msg.text}<time>${msg.time}</time></div>`;
+                return `<div class="msg ${cls}">${escapeHtml(msg.text)}<time>${msg.time || ''}</time></div>`;
             }).join('');
+            
             $('#chat-overlay').style.display = 'flex';
             scrollChatBottom();
 
@@ -1067,50 +1233,70 @@
         function sendMessage() {
             const text = $('#chat-input-field').value.trim();
             if (!text || !STATE.currentChatPeer || !STATE.bugout) return;
+            if (!STATE.matches[STATE.currentChatPeer]) return;
 
             const msg = { text, time: now(), sent: true };
             STATE.matches[STATE.currentChatPeer].messages.push(msg);
             saveMatches();
 
-            STATE.bugout.send(STATE.currentChatPeer, { type: 'message', text });
+            try {
+                STATE.bugout.send(STATE.currentChatPeer, { 
+                    type: 'message', 
+                    text,
+                    timestamp: Date.now()
+                });
 
-            $('#chat-messages').innerHTML += 
-                `<div class="msg sent">${text}<time>${msg.time}</time></div>`;
-            $('#chat-input-field').value = '';
-            scrollChatBottom();
+                $('#chat-messages').innerHTML += 
+                    `<div class="msg sent">${escapeHtml(text)}<time>${msg.time}</time></div>`;
+                $('#chat-input-field').value = '';
+                scrollChatBottom();
+            } catch(e) {
+                console.error('Error sending message:', e);
+                showToast('❌ Erreur d\'envoi');
+            }
         }
 
         function handleIncomingMessage(address, data) {
             if (address !== STATE.currentChatPeer || data.type !== 'message') return;
+            if (!STATE.matches[address]) return;
+            
             const msg = { text: data.text, time: now(), sent: false };
             STATE.matches[address].messages.push(msg);
             saveMatches();
 
             $('#chat-messages').innerHTML += 
-                `<div class="msg recv">${data.text}<time>${msg.time}</time></div>`;
+                `<div class="msg recv">${escapeHtml(data.text)}<time>${msg.time}</time></div>`;
             scrollChatBottom();
         }
 
         function scrollChatBottom() {
             const msgs = $('#chat-messages');
-            setTimeout(() => { msgs.scrollTop = msgs.scrollHeight; }, 100);
+            if (msgs) {
+                setTimeout(() => { 
+                    msgs.scrollTop = msgs.scrollHeight; 
+                }, 100);
+            }
         }
 
         // === ID Copy / Share ===
         $('#copy-id-btn').addEventListener('click', () => {
-            if (!STATE.myPeerId) return;
+            if (!STATE.myPeerId) return showToast('⏳ ID pas encore généré');
+            
             navigator.clipboard.writeText(STATE.myPeerId)
                 .then(() => showToast('📋 ID copié dans le presse-papier !'))
                 .catch(() => showToast('❌ Erreur de copie.'));
         });
 
         $('#share-id-btn').addEventListener('click', () => {
-            if (!STATE.myPeerId) return;
+            if (!STATE.myPeerId) return showToast('⏳ ID pas encore généré');
+            
+            const shareData = {
+                title: '🔥 Mon ID Tinder P2P',
+                text: `Voici mon ID Tinder P2P : ${STATE.myPeerId}`,
+            };
+            
             if (navigator.share) {
-                navigator.share({
-                    title: '🔥 Mon ID Tinder P2P',
-                    text: `Voici mon ID Tinder P2P : ${STATE.myPeerId}`,
-                }).catch(() => {});
+                navigator.share(shareData).catch(() => {});
             } else {
                 navigator.clipboard.writeText(STATE.myPeerId)
                     .then(() => showToast('📋 ID copié (partage non supporté)'))
@@ -1118,12 +1304,48 @@
             }
         });
 
+        // Gestion des erreurs globales
+        window.addEventListener('error', (e) => {
+            console.error('Global error:', e.error);
+        });
+
+        // Gestion de la déconnexion propre
+        window.addEventListener('beforeunload', () => {
+            if (STATE.isDiscoverable) {
+                // Sauvegarder l'état avant de quitter
+                saveMatches();
+            }
+        });
+
         // === Init ===
         async function init() {
-            loadProfile();
-            loadMatches();
-            await initBugout();
-            renderMatches();
+            try {
+                loadProfile();
+                loadMatches();
+                
+                // Initialiser Bugout avec retry
+                let retries = 3;
+                while (retries > 0) {
+                    try {
+                        await initBugout();
+                        break;
+                    } catch(e) {
+                        retries--;
+                        if (retries === 0) {
+                            showToast('❌ Erreur de connexion P2P. Recharge la page.');
+                        } else {
+                            await new Promise(resolve => setTimeout(resolve, 2000));
+                        }
+                    }
+                }
+                
+                renderMatches();
+                
+                console.log('✅ Application initialisée');
+            } catch(e) {
+                console.error('Init error:', e);
+                showToast('❌ Erreur d\'initialisation');
+            }
         }
 
         init();
