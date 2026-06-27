@@ -1,20 +1,17 @@
-﻿
-# 🔥 Tinder P2P - Chat Décentralisé PWA
+# 🔥 Tinder P2P Chat
 
-Application de chat P2P fonctionnant directement dans le navigateur mobile.
+Application de chat P2P décentralisée.
 
-## 🚀 Utilisation
+## 🌐 Version Web (PWA)
+👉 [https://connacri.github.io/Tinder-p2p-app/](https://connacri.github.io/Tinder-p2p-app/)
 
-1. Va sur `https://TON_USERNAME.github.io/tinder-p2p-pwa/`
-2. Ajoute à l'écran d'accueil (menu → "Ajouter à l'écran d'accueil")
-3. Crée ton profil et discute !
+## 📱 Version Android (APK)
+Télécharge le dernier APK dans l'onglet [Actions](https://github.com/Connacri/Tinder-p2p-app/actions)
 
-## ✨ Fonctionnalités
+## 📦 Build automatique
+Chaque push sur `main` génère un APK dans GitHub Actions.
 
-- 📱 PWA installable sur Android/iOS
-- 👤 Profil avec photo
-- 🔍 Découverte de profils
-- 💬 Chat en temps réel
-- ⭐ Favoris
-- 📴 Mode online/offline
-- 🔒 100% local storage
+## 🛠️ Technologies
+- PWA : HTML/CSS/JS + Bugout (P2P)
+- APK : Trusted Web Activity (TWA) via Bubblewrap
+- CI/CD : GitHub Actions
