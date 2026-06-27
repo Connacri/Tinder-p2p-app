@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+    <meta name="theme-color" content="#1a73e8">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Tinder P2P">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔥</text></svg>">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔥</text></svg>">
+    <title>🔥 Tinder P2P</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        :root{--p:#1a73e8;--g:#28a745;--r:#dc3545;--w:#ffc107;--bg:#f0f2f5;--c:#fff;--t:#333;--b:#e0e0e0}
+        body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--t);height:100vh;overflow:hidden;user-select:none;-webkit-tap-highlight-color:transparent}
+        #app{display:flex;flex-direction:column;height:100vh;max-width:500px;margin:0 auto}
+        nav{display:flex;background:var(--c);border-top:1px solid var(--b);padding:5px;position:fixed;bottom:0;width:100%;max-width:500px;z-index:100;padding-bottom:env(safe-area-inset-bottom)}
+        nav button{flex:1;background:none;border:none;padding:8px;font-size:20px;cursor:pointer;border-radius:10px;transition:.3s}
+        nav button.active{background:rgba(26,115,232,.1)}
+        nav button span{display:block;font-size:10px;margin-top:2px}
+        main{flex:1;overflow-y:auto;padding:15px 15px 80px}
+        .screen{display:none;animation:in .3s}
+        .screen.active{display:block}
+        @keyframes in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+        .header{display:flex;justify-content:space-between;align-items:center;background:var(--c);padding:15px;border-radius:12px;margin-bottom:15px;box-shadow:0 2px 8px rgba(0,0,0,.1)}
+        .header h2{font-size:18px}
+        .btn{padding:10px 20px;border:none;border-radius:25px;font-size:14px;font-weight:600;cursor:pointer;color:#fff}
+        .btn-on{background:var(--g);animation:pulse 2s infinite}
+        .btn-off{background:var(--r)}
+        @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(40,167,69,.4)}50%{box-shadow:0 0 0 10px rgba(40,167,69,0)}}
+        .profile-img{width:150px;height:150px;border-radius:50%;object-fit:cover;display:block;margin:15px auto;border:4px solid var(--p)}
+        .input-group{margin-bottom:12px}
+        .input-group input,.input-group textarea{width:100%;padding:12px;border:2px solid var(--b);border-radius:10px;font-size:16px;background:var(--c)}
+        .input-group input:focus,.input-group textarea:focus{outline:none;border-color:var(--p)}
+        .btn-main{width:100%;padding:14px;background:var(--p);color:#fff;border:none;border-radius:25px;font-size:16px;font-weight:600;cursor:pointer;margin-top:10px}
+        .card{background:var(--c);border-radius:12px;padding:15px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,.1);animation:up .3s}
+        @keyframes up{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+        .card-row{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+        .card-img{width:55px;height:55px;border-radius:50%;object-fit:cover;background:var(--b)}
+        .card-info h3{font-size:15px}.card-info p{font-size:12px;color:#666}
+        .card-btns{display:flex;gap:8px}
+        .btn-chat{flex:1;padding:10px;background:var(--p);color:#fff;border:none;border-radius:20px;cursor:pointer;font-weight:600}
+        .btn-star{padding:10px 15px;background:var(--w);border:none;border-radius:20px;cursor:pointer;font-size:16px}
+        .online-badge{background:var(--g);color:#fff;padding:5px 12px;border-radius:15px;font-size:12px;font-weight:600}
+        .chat-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:var(--bg);z-index:200;display:none;flex-direction:column}
+        .chat-header{display:flex;align-items:center;gap:10px;padding:15px;background:var(--c);border-bottom:1px solid var(--b)}
+        .chat-header button{background:none;border:none;font-size:16px;cursor:pointer;color:var(--p)}
+        .chat-header h3{flex:1;font-size:17px}
+        .chat-msgs{flex:1;overflow-y:auto;padding:15px;display:flex;flex-direction:column;gap:8px}
+        .msg{max-width:80%;padding:10px 15px;border-radius:18px;font-size:15px;animation:msg .3s;word-wrap:break-word}
+        @keyframes msg{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:scale(1)}}
+        .msg.sent{align-self:flex-end;background:var(--p);color:#fff;border-bottom-right-radius:5px}
+        .msg.recv{align-self:flex-start;background:var(--c);border-bottom-left-radius:5px;box-shadow:0 1px 3px rgba(0,0,0,.1)}
+        .msg time{font-size:10px;opacity:.7;display:block;margin-top:4px}
+        .chat-input{display:flex;gap:8px;padding:12px;background:var(--c);border-top:1px solid var(--b);padding-bottom:env(safe-area-inset-bottom)}
+        .chat-input input{flex:1;padding:10px 18px;border:2px solid var(--b);border-radius:25px;font-size:15px}
+        .chat-input button{background:var(--p);color:#fff;border:none;padding:10px 18px;border-radius:25px;cursor:pointer;font-size:18px}
+        .empty{text-align:center;color:#999;padding:40px;font-size:15px}
+        .id-display{text-align:center;color:#999;font-size:11px;margin-top:15px}
+        .toast{position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:12px 24px;border-radius:25px;z-index:999;font-size:14px;animation:toastIn .3s}
+        @keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(-20px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+    </style>
+</head>
+<body>
+    <div id="app">
+        <nav>
+            <button class="active" data-screen="profile">👤<span>Profil</span></button>
+            <button data-screen="discover">🔍<span>Découvrir</span></button>
+            <button data-screen="chats">💬<span>Chats</span></button>
+            <button data-screen="favorites">⭐<span>Favoris</span></button>
+        </nav>
+        <main>
+            <div id="s-profile" class="screen active">
+                <div class="header">
+                    <h2>👤 Mon Profil</h2>
+                    <button id="onlineBtn" class="btn btn-off" onclick="toggleOnline()">🔴 Offline</button>
+                </div>
+                <img id="profileImg" class="profile-img" src="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect fill=%22%23ddd%22 width=%22100%22 height=%22100%22/><text y=%22.9em%22 font-size=%2290%22>👤</text></svg>" alt="Profile">
+                <input type="file" id="photoInput" accept="image/*" style="display:none" onchange="handlePhoto(event)">
+                <button class="btn-main" style="background:#28a745" onclick="document.getElementById('photoInput').click()">📸 Choisir une photo</button>
+                <div class="input-group" style="margin-top:15px">
+                    <input type="text" id="pseudoInput" placeholder="Pseudo *" maxlength="30">
+                </div>
+                <div class="input-group">
+                    <textarea id="bioInput" placeholder="Bio (optionnel)" maxlength="200" rows="2"></textarea>
+                </div>
+                <button class="btn-main" onclick="saveProfile()">💾 Sauvegarder</button>
+                <div class="id-display">ID: <span id="deviceId"></span></div>
+            </div>
+            <div id="s-discover" class="screen">
+                <div class="header">
+                    <h2>🔍 Découvrir</h2>
+                    <span class="online-badge" id="onlineCount">0 en ligne</span>
+                </div>
+                <div id="profilesGrid"></div>
+            </div>
+            <div id="s-chats" class="screen">
+                <div class="header"><h2>💬 Messages</h2></div>
+                <div id="chatsList"><p class="empty">Aucune conversation</p></div>
+            </div>
+            <div id="s-favorites" class="screen">
+                <div class="header"><h2>⭐ Favoris</h2></div>
+                <div id="favList"><p class="empty">Aucun favori</p></div>
+            </div>
+        </main>
+        <div id="chatOverlay" class="chat-overlay">
+            <div class="chat-header">
+                <button onclick="closeChat()">← Retour</button>
+                <h3 id="chatName">Chat</h3>
+                <button id="chatFavBtn" onclick="toggleFavInChat()">☆</button>
+            </div>
+            <div id="chatMessages" class="chat-msgs"></div>
+            <div class="chat-input">
+                <input type="text" id="chatInput" placeholder="Message..." maxlength="500">
+                <button onclick="sendMsg()">📨</button>
+            </div>
+        </div>
+    </div>
+    <script>
+        // === APP STATE ===
+        const S = {
+            deviceId: localStorage.deviceId || (localStorage.deviceId = crypto.randomUUID()),
+            profile: JSON.parse(localStorage.profile || '{"pseudo":"User","bio":"","photo":"","favorites":[]}'),
+            online: false,
+            peers: {},
+            connections: JSON.parse(localStorage.connections || '{}'),
+            currentPeer: null,
+            displayed: new Set()
+        };
+        
+        // === INIT ===
+        function init(){
+            document.getElementById('pseudoInput').value = S.profile.pseudo || '';
+            document.getElementById('bioInput').value = S.profile.bio || '';
+            if(S.profile.photo) document.getElementById('profileImg').src = S.profile.photo;
+            document.getElementById('deviceId').textContent = S.deviceId.substring(0,10)+'...';
+            document.querySelectorAll('nav button').forEach(b => b.onclick = () => switchScreen(b.dataset.screen));
+            if(!localStorage.peers) setupPeers();
+            S.peers = JSON.parse(localStorage.peers || '{}');
+            setInterval(refreshDiscover, 5000);
+        }
+        
+        // === NAVIGATION ===
+        function switchScreen(name){
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById('s-'+name).classList.add('active');
+            document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.dataset.screen === name));
+            if(name==='discover') refreshDiscover();
+            if(name==='chats') refreshChats();
+            if(name==='favorites') refreshFavs();
+        }
+        
+        // === ONLINE TOGGLE ===
+        function toggleOnline(){
+            S.online = !S.online;
+            const btn = document.getElementById('onlineBtn');
+            if(S.online){btn.textContent='🟢 Online';btn.className='btn btn-on';toast('🟢 Vous êtes en ligne !');refreshDiscover();}
+            else{btn.textContent='🔴 Offline';btn.className='btn btn-off';toast('🔴 Vous êtes hors ligne');}
+        }
+        
+        // === PROFILE ===
+        function handlePhoto(e){
+            const f = e.target.files[0]; if(!f) return;
+            const r = new FileReader();
+            r.onload = ev => {S.profile.photo=ev.target.result;document.getElementById('profileImg').src=ev.target.result;saveProfile();toast('📸 Photo mise à jour !')};
+            r.readAsDataURL(f);
+        }
+        function saveProfile(){
+            S.profile.pseudo = document.getElementById('pseudoInput').value.trim() || 'User';
+            S.profile.bio = document.getElementById('bioInput').value.trim();
+            localStorage.profile = JSON.stringify(S.profile);
+            toast('✅ Profil sauvegardé !');
+        }
+        
+        // === DEMO PEERS ===
+        function setupPeers(){
+            S.peers = {
+                alice:{pseudo:'Alice',bio:'Chats & café ☕',photo:'',online:true,last:new Date().toISOString()},
+                bob:{pseudo:'Bob',bio:'Dev Python 🏔️',photo:'',online:true,last:new Date().toISOString()},
+                charlie:{pseudo:'Charlie',bio:'Artiste digital ✨',photo:'',online:false,last:new Date().toISOString()},
+                diana:{pseudo:'Diana',bio:'Photographe 📸',photo:'',online:true,last:new Date().toISOString()}
+            };
+            localStorage.peers = JSON.stringify(S.peers);
+        }
+        
+        // === DISCOVER ===
+        function refreshDiscover(){
+            if(!S.online) return;
+            const online = Object.entries(S.peers).filter(([id,p]) => p.online && id !== S.deviceId);
+            document.getElementById('onlineCount').textContent = online.length + ' en ligne';
+            const grid = document.getElementById('profilesGrid');
+            grid.innerHTML = online.length ? '' : '<p class="empty">Aucun profil en ligne</p>';
+            online.forEach(([id,p]) => {
+                const card = document.createElement('div'); card.className='card';
+                const isFav = S.profile.favorites.includes(id);
+                card.innerHTML = `<div class="card-row">
+                    <div class="card-img" style="background:#ddd;display:flex;align-items:center;justify-content:center;font-size:30px">👤</div>
+                    <div class="card-info"><h3>${p.pseudo}</h3><p>${(p.bio||'').substring(0,50)}</p></div>
+                </div>
+                <div class="card-btns">
+                    <button class="btn-chat" onclick="startChat('${id}')">💬 Chat</button>
+                    <button class="btn-star" onclick="toggleFav('${id}',this)">${isFav?'⭐':'☆'}</button>
+                </div>`;
+                grid.appendChild(card);
+            });
+        }
+        
+        // === CHAT ===
+        function startChat(id){
+            S.currentPeer = id;
+            if(!S.connections[id]) S.connections[id] = {messages:[]};
+            const cached = localStorage['chat_'+id];
+            if(cached) S.connections[id].messages = JSON.parse(cached);
+            const peer = S.peers[id] || {pseudo:id.substring(0,8)};
+            document.getElementById('chatName').textContent = peer.pseudo;
+            document.getElementById('chatFavBtn').textContent = S.profile.favorites.includes(id) ? '★' : '☆';
+            loadMessages();
+            document.getElementById('chatOverlay').style.display = 'flex';
+            document.getElementById('chatInput').focus();
+        }
+        function closeChat(){
+            document.getElementById('chatOverlay').style.display = 'none';
+            S.currentPeer = null;
+            refreshChats();
+        }
+        function loadMessages(){
+            const c = document.getElementById('chatMessages'); c.innerHTML = '';
+            S.displayed.clear();
+            (S.connections[S.currentPeer]?.messages||[]).forEach(m => {
+                if(!S.displayed.has(m.id)){addBubble(m);S.displayed.add(m.id);}
+            });
+            c.scrollTop = c.scrollHeight;
+        }
+        function addBubble(m){
+            const d = document.createElement('div');
+            d.className = 'msg ' + (m.from === S.deviceId ? 'sent' : 'recv');
+            d.innerHTML = m.text + '<time>' + new Date(m.time).toLocaleTimeString('fr',{hour:'2-digit',minute:'2-digit'}) + '</time>';
+            document.getElementById('chatMessages').appendChild(d);
+        }
+        function sendMsg(){
+            if(!S.currentPeer) return;
+            const input = document.getElementById('chatInput');
+            const text = input.value.trim(); if(!text) return;
+            const msg = {id:crypto.randomUUID(),from:S.deviceId,to:S.currentPeer,text:text,time:new Date().toISOString()};
+            if(!S.connections[S.currentPeer]) S.connections[S.currentPeer] = {messages:[]};
+            S.connections[S.currentPeer].messages.push(msg);
+            localStorage['chat_'+S.currentPeer] = JSON.stringify(S.connections[S.currentPeer].messages);
+            localStorage.connections = JSON.stringify(S.connections);
+            addBubble(msg); S.displayed.add(msg.id);
+            input.value = '';
+            document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
+            if(S.currentPeer.startsWith('alice')||S.currentPeer.startsWith('bob')||S.currentPeer.startsWith('diana')){
+                setTimeout(() => simulateReply(S.currentPeer), 1500);
+            }
+        }
+        function simulateReply(id){
+            const reps = {alice:['Salut! 👋','Ça va ?','Cool !'],bob:['Hey !','Tu codes ?','Nice !'],diana:['Hello !','Ravie !','📸']};
+            const rep = reps[id] || ['Salut !'];
+            const msg = {id:crypto.randomUUID(),from:id,to:S.deviceId,text:rep[Math.floor(Math.random()*rep.length)],time:new Date().toISOString()};
+            if(!S.connections[id]) S.connections[id] = {messages:[]};
+            S.connections[id].messages.push(msg);
+            localStorage['chat_'+id] = JSON.stringify(S.connections[id].messages);
+            if(S.currentPeer === id){addBubble(msg);S.displayed.add(msg.id);document.getElementById('chatMessages').scrollTop=document.getElementById('chatMessages').scrollHeight;}
+        }
+        
+        // === FAVORITES ===
+        function toggleFav(id,btn){
+            const idx = S.profile.favorites.indexOf(id);
+            if(idx > -1){S.profile.favorites.splice(idx,1);if(btn)btn.textContent='☆';}
+            else{S.profile.favorites.push(id);if(btn)btn.textContent='⭐';}
+            localStorage.profile = JSON.stringify(S.profile);
+        }
+        function toggleFavInChat(){
+            if(!S.currentPeer) return;
+            const btn = document.getElementById('chatFavBtn');
+            const idx = S.profile.favorites.indexOf(S.currentPeer);
+            if(idx > -1){S.profile.favorites.splice(idx,1);btn.textContent='☆';}
+            else{S.profile.favorites.push(S.currentPeer);btn.textContent='★';}
+            localStorage.profile = JSON.stringify(S.profile);
+        }
+        function refreshFavs(){
+            const list = document.getElementById('favList');
+            const favs = S.profile.favorites.filter(id => S.peers[id]);
+            if(!favs.length){list.innerHTML='<p class="empty">Aucun favori</p>';return;}
+            list.innerHTML = '';
+            favs.forEach(id => {
+                const p = S.peers[id];
+                const d = document.createElement('div'); d.className='card';
+                d.innerHTML = `<div class="card-row">
+                    <div class="card-img" style="background:#ddd;display:flex;align-items:center;justify-content:center;font-size:25px">👤</div>
+                    <div class="card-info"><h3>${p.online?'🟢':'🔴'} ${p.pseudo}</h3><p>Vu: ${new Date(p.last).toLocaleDateString()}</p></div>
+                </div>
+                <div class="card-btns">
+                    <button class="btn-chat" onclick="startChat('${id}')">💬</button>
+                    <button class="btn-star" onclick="toggleFav('${id}',this);refreshFavs()">🗑</button>
+                </div>`;
+                list.appendChild(d);
+            });
+        }
+        function refreshChats(){
+            const list = document.getElementById('chatsList');
+            const convs = Object.keys(S.connections).filter(id => S.connections[id].messages.length);
+            if(!convs.length){list.innerHTML='<p class="empty">Aucune conversation</p>';return;}
+            list.innerHTML = '';
+            convs.forEach(id => {
+                const p = S.peers[id] || {pseudo:id.substring(0,8)};
+                const count = S.connections[id].messages.length;
+                const d = document.createElement('div'); d.className='card';
+                d.innerHTML = `<div class="card-row">
+                    <div class="card-img" style="background:#ddd;display:flex;align-items:center;justify-content:center;font-size:25px">💬</div>
+                    <div class="card-info"><h3>${p.pseudo}</h3><p>${count} messages</p></div>
+                </div>
+                <button class="btn-chat" onclick="startChat('${id}')" style="width:100%">Ouvrir</button>`;
+                list.appendChild(d);
+            });
+        }
+        
+        // === UTILS ===
+        function toast(msg){
+            const t = document.createElement('div'); t.className='toast'; t.textContent=msg;
+            document.body.appendChild(t);
+            setTimeout(() => {t.style.opacity='0';setTimeout(()=>t.remove(),300)},2000);
+        }
+        
+        // === START ===
+        init();
+    </script>
+</body>
+</html>
