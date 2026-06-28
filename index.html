@@ -351,6 +351,10 @@
                 <input class="input-field" id="input-name" placeholder="Ton prénom" maxlength="30">
             </div>
             <div class="input-group">
+                <label for="input-phone" style="display:block; font-size:12px; margin-bottom:4px; color:var(--text-secondary); font-weight:600; text-align:left; padding-left:4px;">NUMÉRO DE TÉLÉPHONE</label>
+                <input class="input-field" id="input-phone" placeholder="+33 ..." maxlength="20">
+            </div>
+            <div class="input-group">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; padding:0 4px;">
                     <label for="input-bio" style="font-size:12px; color:var(--text-secondary); font-weight:600;">BIO</label>
                     <span id="bio-counter" style="font-size:11px; color:var(--text-secondary);">0/150</span>
@@ -401,6 +405,7 @@
             <div class="chat-messages" id="chat-messages"></div>
             <div class="chat-input-bar">
                 <input type="text" id="input-message" placeholder="Écris un message..." maxlength="500" aria-label="Message à envoyer">
+                <button class="btn btn-ghost" id="btn-audio" style="padding:12px; font-size:20px;" aria-label="Enregistrer un message vocal">🎤</button>
                 <button class="btn btn-primary" id="btn-send" style="padding:12px 16px;" aria-label="Envoyer le message">➤</button>
             </div>
         </div>
@@ -419,17 +424,17 @@
         (function() {
             // ========== ÉTAT ==========
             const STATE = {
-                myPeerId: null, seed: localStorage.getItem('p2p_seed'),
-                profile: JSON.parse(localStorage.getItem('p2p_profile') || '{"name":"","bio":"","avatar":"😊"}'),
+                myPeerId: null,
+                pair: null,
+                profile: JSON.parse(localStorage.getItem('p2p_profile') || '{"name":"","bio":"","phone":"","avatar":"😊"}'),
                 isDiscoverable: false,
                 matches: JSON.parse(localStorage.getItem('p2p_matches') || '{}'),
-                messages: {}, // Loaded on demand
-                messages: {}, // Loaded on demand
-                messages: {}, // Loaded on demand
+                messages: JSON.parse(localStorage.getItem('p2p_messages') || '{}'), // Cache local des messages par peerId
                 currentChatPeer: null,
                 gun: null,
-                user: null,
-                discoveryNode: 'tinder-p2p-discovery-v3'
+                discoveryNode: 'tinder-p2p-discovery-v4',
+                mediaRecorder: null,
+                audioChunks: []
             };
 
             // ========== UTILITAIRES ==========
@@ -437,82 +442,19 @@
             const $$ = (s) => document.querySelectorAll(s);
             const toast = (msg) => {
                 const t = document.createElement('div');
-                t.className = 'toast'; t.setAttribute('role', 'alert'); t.setAttribute('aria-live', 'assertive');
+                t.className = 'toast'; t.setAttribute('role', 'alert');
                 t.textContent = msg;
                 document.body.appendChild(t);
                 setTimeout(() => t.remove(), 3000);
             };
+            const escapeHtml = (text) => {
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            };
+            const getChatId = (pub1, pub2) => [pub1, pub2].sort().join('_');
 
-            // ========== PROFIL UI ==========
-            function loadProfileUI() {
-                $('#input-name').value = STATE.profile.name;
-                $('#input-bio').value = STATE.profile.bio;
-                $('#profile-avatar').textContent = STATE.profile.avatar;
-            }
-
-
-            // ========== LIVE FEEDBACK & ACCESSIBILITY ==========
-            const inputName = $('#input-name');
-            const inputBio = $('#input-bio');
-            const bioCounter = $('#bio-counter');
-            const profileAvatarDisplay = $('#profile-avatar');
-
-            function updateBioCounter() {
-                const len = inputBio.value.length;
-                bioCounter.textContent = `${len}/150`;
-                if (len >= 140) bioCounter.style.color = 'var(--primary)';
-                else bioCounter.style.color = 'var(--text-secondary)';
-            }
-
-            inputBio.addEventListener('input', updateBioCounter);
-            inputName.addEventListener('input', () => {
-                // No direct display in the profile screen's header,
-                // but let's assume we want to show feedback or just keep it for consistency.
-                // In this app, the 'live preview' is essentially the profile screen itself
-                // as it uses the same inputs. But we can add a subtle 'Saved' / 'Unsaved' indicator.
-                $('#btn-save-profile').style.opacity = '1';
-                $('#btn-save-profile').textContent = '💾 Sauvegarder';
-            });
-
-            inputBio.addEventListener('input', () => {
-                $('#btn-save-profile').style.opacity = '1';
-                $('#btn-save-profile').textContent = '💾 Sauvegarder';
-            });
-
-
-            // Initial call
-            setTimeout(updateBioCounter, 500);
-
-            // Add visual feedback to avatar change (accessibility)
-            const btnChangeAvatar = $('#btn-change-avatar');
-            btnChangeAvatar.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    btnChangeAvatar.click();
-                }
-            });
-
-            $('#btn-save-profile').addEventListener('click', () => {
-                STATE.profile.name = $('#input-name').value.trim();
-                STATE.profile.bio = $('#input-bio').value.trim();
-                if (!STATE.profile.name) return toast('⚠️ Entre un prénom');
-                localStorage.setItem('p2p_profile', JSON.stringify(STATE.profile));
-                toast('✅ Profil sauvegardé');
-            });
-
-            const avatars = ['😊','😎','🥳','🤩','😇','🦊','🐱','🐶','🦄','🐼','🌸','🔥','💎','🍕','🎸','⚽'];
-            $('#btn-change-avatar').addEventListener('click', () => {
-                const idx = avatars.indexOf(STATE.profile.avatar);
-                STATE.profile.avatar = avatars[(idx + 1) % avatars.length];
-                $('#profile-avatar').textContent = STATE.profile.avatar;
-                toast('Avatar changé');
-            });
-
-            // ========== IDENTIFIANT UNIQUE ==========
-            function generateFallbackId() {
-                return 'local-' + Math.random().toString(36).substr(2, 9) + '-' + Date.now().toString(36);
-            }
-
+            // ========== INITIALISATION GUN ==========
             async function initGun() {
                 $('#network-status').textContent = '🔵 Connexion au réseau P2P...';
                 $('#display-peer-id').textContent = '⏳ Initialisation...';
@@ -526,133 +468,85 @@
                         ]
                     });
 
-                    // Génération ou récupération d'une paire de clés (Web3 identity)
                     let pair = localStorage.getItem('p2p_keypair');
                     if (pair) {
-                        pair = JSON.parse(pair);
+                        STATE.pair = JSON.parse(pair);
                     } else {
-                        pair = await SEA.pair();
-                        localStorage.setItem('p2p_keypair', JSON.stringify(pair));
+                        STATE.pair = await SEA.pair();
+                        localStorage.setItem('p2p_keypair', JSON.stringify(STATE.pair));
                     }
 
-                    STATE.myPeerId = pair.pub;
+                    STATE.myPeerId = STATE.pair.pub;
                     $('#display-peer-id').textContent = STATE.myPeerId.substring(0, 15) + '...';
-                    $('#network-status').textContent = '🟢 Connecté au réseau P2P';
+                    $('#network-status').textContent = '🟢 Connecté (Gun.js)';
 
-                    setupGunListeners();
+                    setupDiscovery();
                     return STATE.myPeerId;
                 } catch (e) {
                     console.error("Gun Init Error:", e);
-                    $('#display-peer-id').textContent = '❌ Erreur de connexion';
-                    $('#network-status').textContent = '🔴 Échec du réseau';
-                    throw e;
-                }
-                const bugoutOpts = {}; if (STATE.seed) bugoutOpts.seed = STATE.seed; STATE.bugout = new Bugout(bugoutOpts);
-                return new Promise((resolve, reject) => {
-                    let attempts = 0;
-                    const maxAttempts = 30; // 3 secondes
-                    const check = setInterval(() => {
-                        const addr = STATE.bugout.address();
-                        if (addr) {
-                            clearInterval(check);
-                            STATE.myPeerId = addr;
-                            if (!STATE.seed) { STATE.seed = STATE.bugout.seed; localStorage.setItem('p2p_seed', STATE.seed); }
-                            if (!STATE.seed) { STATE.seed = STATE.bugout.seed; localStorage.setItem('p2p_seed', STATE.seed); }
-                            if (!STATE.seed) { STATE.seed = STATE.bugout.seed; localStorage.setItem("p2p_seed", STATE.seed); }
-                            if (!STATE.seed) { STATE.seed = STATE.bugout.seed; localStorage.setItem("p2p_seed", STATE.seed); }
-                            $('#display-peer-id').textContent = addr;
-                            $('#network-status').textContent = '🟢 Connecté (P2P)';
-                            setupNetworkListeners();
-                            resolve(addr);
-                        }
-                        attempts++;
-                        if (attempts >= maxAttempts) {
-                            clearInterval(check);
-                            const fallback = generateFallbackId();
-                            STATE.myPeerId = fallback;
-                            if (!STATE.seed) { STATE.seed = fallback; localStorage.setItem('p2p_seed', STATE.seed); }
-                            if (!STATE.seed) { STATE.seed = fallback; localStorage.setItem('p2p_seed', STATE.seed); }
-                            if (!STATE.seed) { STATE.seed = fallback; localStorage.setItem("p2p_seed", STATE.seed); }
-                            if (!STATE.seed) { STATE.seed = fallback; localStorage.setItem("p2p_seed", STATE.seed); }
-                            $('#display-peer-id').textContent = fallback;
-                            $('#network-status').textContent = '🟠 Mode local (WebRTC indisponible)';
-                            console.warn('Fallback ID utilisé');
-                            setupFallbackListeners();
-                            resolve(fallback);
-                        }
-                    }, 100);
-                });
-            }
-
-            function setupGunListeners() {
-                // Écoute de la découverte globale
-                STATE.gun.get(STATE.discoveryNode).map().on((data, pub) => {
-                    if (pub === STATE.myPeerId) return;
-                    if (data && data.profile) {
-                        try {
-                            const profile = JSON.parse(data.profile);
-                            addOrUpdateDiscover(pub, profile);
-                        } catch(e) { console.error("Err parse profile", e); }
-                    }
-                });
-                STATE.bugout.on('message', (addr, data) => {
-                    if (!data || typeof data !== 'object') return;
-                    if (data.type === 'ping' && STATE.isDiscoverable) {
-                        STATE.bugout.send(addr, { type: 'pong', profile: STATE.profile });
-                        addOrUpdateMatch(addr, data.profile);
-                        toast(`💌 ${data.profile.name || 'Quelqu\'un'} t'a trouvé !`);
-                    } else if (data.type === 'pong') {
-                        addOrUpdateMatch(addr, data.profile);
-                        toast(`🎉 Profil trouvé !`);
-
-                    } else if (data.type === 'message') {
-                        receiveMessage(addr, data);
-                    } else if (data.type === 'sync_req') {
-                        const msgs = loadMessages(addr);
-                        if (data.lastIndex < msgs.length) {
-                            // Send missing messages (deltas)
-                            const deltas = msgs.slice(data.lastIndex);
-                            deltas.forEach(m => {
-                                if (m.sent) { // Only send messages WE sent
-                                    STATE.bugout.send(addr, { type: 'message', text: m.text, seq: m.seq });
-                                }
-                            });
-                        }
-                    }
-
-                });
-            }
-
-            function addOrUpdateDiscover(pub, profile) {
-                // On ne l'ajoute aux matchs que si on a un échange ou si on "like"
-                // Pour l'instant on l'affiche juste dans Discover
-                if (!STATE.matches[pub]) {
-                    renderDiscover(pub, profile);
+                    $('#display-peer-id').textContent = '❌ Erreur réseau';
+                    $('#network-status').textContent = '🔴 Échec';
                 }
             }
 
-            function setupFallbackListeners() {
-                console.log('Mode fallback : connexion manuelle uniquement');
+            // ========== PROFIL ==========
+            function loadProfileUI() {
+                $('#input-name').value = STATE.profile.name || '';
+                $('#input-bio').value = STATE.profile.bio || '';
+                $('#input-phone').value = STATE.profile.phone || '';
+                $('#profile-avatar').textContent = STATE.profile.avatar || '😊';
+                updateBioCounter();
             }
 
-            $('#btn-regenerate-id').addEventListener('click', async () => {
-                if (confirm('Cela va supprimer ton identité actuelle et tes contacts. Continuer ?')) {
-                    localStorage.removeItem('p2p_keypair');
-                    localStorage.removeItem('p2p_matches');
-                    location.reload();
+            function updateBioCounter() {
+                const len = $('#input-bio').value.length;
+                $('#bio-counter').textContent = `${len}/150`;
+            }
+
+            $('#input-bio').addEventListener('input', updateBioCounter);
+
+            $('#btn-save-profile').addEventListener('click', () => {
+                STATE.profile.name = $('#input-name').value.trim();
+                STATE.profile.bio = $('#input-bio').value.trim();
+                STATE.profile.phone = $('#input-phone').value.trim();
+                if (!STATE.profile.name) return toast('⚠️ Entre un prénom');
+                localStorage.setItem('p2p_profile', JSON.stringify(STATE.profile));
+
+                if (STATE.isDiscoverable) {
+                    broadcastProfile();
                 }
-                STATE.myPeerId = null;
-                localStorage.removeItem('p2p_seed'); STATE.seed = null;
-                localStorage.removeItem('p2p_seed'); STATE.seed = null;
-                localStorage.removeItem("p2p_seed"); STATE.seed = null;
-                localStorage.removeItem("p2p_seed"); STATE.seed = null;
-                STATE.seenPeers.clear();
-                $('#display-peer-id').textContent = '⏳ Régénération...';
-                await initBugout();
-                toast('✅ Nouvel ID généré');
+                toast('✅ Profil sauvegardé');
             });
 
-            // ========== DÉCOUVRABILITÉ ==========
+            const avatars = ['😊','😎','🥳','🤩','😇','🦊','🐱','🐶','🦄','🐼','🌸','🔥','💎','🍕','🎸','⚽'];
+            $('#btn-change-avatar').addEventListener('click', () => {
+                const idx = avatars.indexOf(STATE.profile.avatar);
+                STATE.profile.avatar = avatars[(idx + 1) % avatars.length];
+                $('#profile-avatar').textContent = STATE.profile.avatar;
+            });
+
+            // ========== DÉCOUVERTE ==========
+            function setupDiscovery() {
+                STATE.gun.get(STATE.discoveryNode).map().on((data, pub) => {
+                    if (pub === STATE.myPeerId || !data) return;
+                    try {
+                        const profile = typeof data.profile === 'string' ? JSON.parse(data.profile) : data.profile;
+                        if (profile && profile.name) {
+                            addOrUpdateDiscover(pub, profile);
+                        }
+                    } catch(e) {}
+                });
+            }
+
+            function broadcastProfile() {
+                if (!STATE.gun) return;
+                if (!STATE.pair) return;
+                STATE.gun.get(STATE.discoveryNode).get(STATE.myPeerId).put({
+                    profile: JSON.stringify(STATE.profile),
+                    updated: Date.now()
+                });
+            }
+
             $('#btn-toggle-discover').addEventListener('click', () => {
                 STATE.isDiscoverable = !STATE.isDiscoverable;
                 const btn = $('#btn-toggle-discover');
@@ -660,10 +554,7 @@
                 btn.className = `btn ${STATE.isDiscoverable ? 'btn-success' : ''}`;
 
                 if (STATE.isDiscoverable) {
-                    STATE.gun.get(STATE.discoveryNode).get(STATE.myPeerId).put({
-                        profile: JSON.stringify(STATE.profile),
-                        timestamp: Date.now()
-                    });
+                    broadcastProfile();
                     toast('📡 Tu es visible !');
                 } else {
                     STATE.gun.get(STATE.discoveryNode).get(STATE.myPeerId).put(null);
@@ -671,299 +562,173 @@
                 }
             });
 
-            // ========== CONNEXION MANUELLE ==========
-            $('#btn-connect').addEventListener('click', () => {
-                const peerId = $('#input-peer-id').value.trim();
-                if (!peerId) return toast('⚠️ Entre un ID');
-                if (peerId === STATE.myPeerId) return toast('⚠️ C\'est ton ID');
+            const discoveredPeers = {};
+            function addOrUpdateDiscover(pub, profile) {
+                if (STATE.matches[pub]) return; // Déjà un match
+                discoveredPeers[pub] = profile;
+                if ($('#screen-discover').classList.contains('active')) {
+                    renderDiscover();
+                }
+            }
 
-                toast('🔍 Recherche du profil...');
-                STATE.gun.get(STATE.discoveryNode).get(peerId).once((data) => {
-                    if (data && data.profile) {
-                        const profile = JSON.parse(data.profile);
-                        addOrUpdateMatch(peerId, profile);
-                        toast('✅ Ami ajouté !');
-                        openChat(peerId);
-                    } else {
-                        toast('❌ Profil introuvable');
-                    }
+            function renderDiscover() {
+                const container = $('#discover-list');
+                const ids = Object.keys(discoveredPeers);
+                if (ids.length === 0) {
+                    container.innerHTML = '<div class="empty-state">🔍 Aucun profil trouvé...</div>';
+                    return;
+                }
+                container.innerHTML = ids.map(id => {
+                    const p = discoveredPeers[id];
+                    return `
+                    <div class="card">
+                        <div class="card-avatar">${p.avatar}</div>
+                        <div class="card-info">
+                            <h3>${p.name}</h3>
+                            <p>${p.bio || 'Pas de bio'}</p>
+                        </div>
+                        <button class="btn btn-primary" data-peer="${id}">💬</button>
+                    </div>`;
+                }).join('');
+                container.querySelectorAll('.btn-primary').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const id = btn.dataset.peer;
+                        addMatch(id, discoveredPeers[id]);
+                        openChat(id);
+                    });
                 });
-            });
+            }
 
-            // ========== MATCHS ==========
-            function addOrUpdateMatch(peerId, profile) {
+            // ========== MATCHS & CHAT ==========
+            function addMatch(peerId, profile) {
                 if (!STATE.matches[peerId]) {
                     STATE.matches[peerId] = {
-                        name: profile.name || 'Anonyme',
-                        bio: profile.bio || '',
-                        avatar: profile.avatar || '😊',
-                        starred: false,
-                        unread: 0,
+                        name: profile.name,
+                        avatar: profile.avatar,
                         lastActivity: Date.now()
                     };
-                } else {
-                    Object.assign(STATE.matches[peerId], {
-                        name: profile.name || STATE.matches[peerId].name,
-                        bio: profile.bio || STATE.matches[peerId].bio,
-                        avatar: profile.avatar || STATE.matches[peerId].avatar,
-                        lastActivity: Date.now()
-                    });
-                }
-                saveMatches();
-                renderMatches();
-                renderDiscover();
-            }
-
-
-            function saveMatches() {
-                localStorage.setItem('p2p_matches', JSON.stringify(STATE.matches));
-            }
-
-            function saveMessages(peerId) {
-                if (STATE.messages[peerId]) {
-                    localStorage.setItem('p2p_msgs_' + peerId, JSON.stringify(STATE.messages[peerId]));
+                    localStorage.setItem('p2p_matches', JSON.stringify(STATE.matches));
                 }
             }
-
-            function loadMessages(peerId) {
-                if (!STATE.messages[peerId]) {
-                    STATE.messages[peerId] = JSON.parse(localStorage.getItem('p2p_msgs_' + peerId) || '[]');
-                }
-                return STATE.messages[peerId];
-            }
-
-
-            }
-
-
-                return STATE.messages[peerId];
-            }
-
-
-            }
-
-
-                return STATE.messages[peerId];
-            }
-
 
             function renderMatches() {
                 const container = $('#matches-list');
                 const ids = Object.keys(STATE.matches);
                 if (ids.length === 0) {
-                    container.innerHTML = '<div class="empty-state" role="status" aria-live="polite">💔 Aucun match pour le moment.<br>Va dans "Découvrir" !</div>';
+                    container.innerHTML = '<div class="empty-state">💝 Pas encore de matchs.</div>';
                     return;
                 }
                 container.innerHTML = ids.map(id => {
                     const m = STATE.matches[id];
-                    const msgs = loadMessages(id); const lastMsg = msgs.length ? msgs[msgs.length-1].text : 'Pas encore de messages';
-                    return `
-                    <div class="card">
-                        <div class="card-avatar">${m.avatar}</div>
-                        <div class="card-info">
-                            <h3>${m.name} ${m.starred ? '⭐' : ''}</h3>
-                            <p>${lastMsg}</p>
-                        </div>
-                        <button class="btn btn-primary" style="padding:8px 16px;" data-peer="${id}" aria-label="Ouvrir la discussion avec ${m.name}">💬</button>
-                    </div>`;
-                }).join('');
-                // Attacher les événements
-                container.querySelectorAll('.btn-primary').forEach(btn => {
-                    btn.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        openChat(btn.dataset.peer);
-                    });
-                });
-            }
-
-            const discoveredPeers = {};
-            function renderDiscover(pub, profile) {
-                if (pub) discoveredPeers[pub] = profile;
-                const container = $('#discover-list');
-                const ids = Object.keys(discoveredPeers);
-                if (ids.length === 0) {
-                    container.innerHTML = '<div class="empty-state" role="status" aria-live="polite">🔍 Aucun profil découvert.<br>Active la découverte ou entre un ID manuellement.</div>';
-                    return;
-                }
-                container.innerHTML = ids.map(id => {
-                    const m = discoveredPeers[id];
                     return `
                     <div class="card">
                         <div class="card-avatar">${m.avatar}</div>
                         <div class="card-info">
                             <h3>${m.name}</h3>
-                            <p>${m.bio || 'Pas de bio'}</p>
+                            <p>Clique pour discuter</p>
                         </div>
-                        <button class="btn btn-primary" style="padding:8px 16px;" data-peer="${id}" aria-label="Ouvrir la discussion avec ${m.name}">💬</button>
+                        <button class="btn btn-primary" data-peer="${id}">💬</button>
                     </div>`;
                 }).join('');
                 container.querySelectorAll('.btn-primary').forEach(btn => {
-                    btn.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        addOrUpdateMatch(btn.dataset.peer, discoveredPeers[btn.dataset.peer]);
-                        openChat(btn.dataset.peer);
-                    });
+                    btn.addEventListener('click', () => openChat(btn.dataset.peer));
                 });
             }
 
-            // ========== CHAT ==========
-
-            function openChat(peerId) {
+            // REPLACED MESSAGING BLOCK
+            async function openChat(peerId) {
                 STATE.currentChatPeer = peerId;
                 const m = STATE.matches[peerId];
-                if (!m) return;
-                $('#chat-peer-name').textContent = m.name || 'Anonyme';
-                const chatMsgs = $('#chat-messages');
-                const msgs = loadMessages(peerId);
+                $('#chat-peer-name').textContent = m.name;
+                $('#chat-messages').innerHTML = '';
+                const chatId = getChatId(STATE.myPeerId, peerId);
 
-                // Efficient initial render
-                chatMsgs.innerHTML = msgs.map(msg => renderMessageHTML(msg)).join('');
-
-                document.getElementById('chat-overlay').classList.add('active');
-                chatMsgs.scrollTop = chatMsgs.scrollHeight;
-                if (m.unread) {
-                    m.unread = 0;
-                    saveMatches();
-                }
-
-                // Delta Sync: Request missing messages
-                if (STATE.bugout) {
-                    STATE.bugout.send(peerId, { type: 'sync_req', lastIndex: msgs.length });
-                }
-            }
-
-            function renderMessageHTML(msg) {
-                const cls = msg.sent ? 'sent' : 'received';
-                return `<div class="message ${cls}">${escapeHtml(msg.text)}<time>${msg.time || ''}</time></div>`;
-            }
-
-
-            function closeChat() {
-                document.getElementById('chat-overlay').classList.remove('active');
-                STATE.currentChatPeer = null;
-                renderMatches();
-            }
-
-            $('#btn-close-chat').addEventListener('click', closeChat);
-            $('#btn-send').addEventListener('click', sendMessage);
-            $('#input-message').addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') sendMessage();
-            });
-
-
-            function sendMessage() {
-                const text = $('#input-message').value.trim();
-                if (!text || !STATE.currentChatPeer) return;
-                const peerId = STATE.currentChatPeer;
-                const msgs = loadMessages(peerId);
-                const msg = {
-                    text,
-                    time: new Date().toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' }),
-                    sent: true,
-                    seq: msgs.length
-                };
-                msgs.push(msg);
-                saveMessages(peerId);
-
-                // Delta Rendering
-                const chatMsgs = $('#chat-messages');
-                chatMsgs.insertAdjacentHTML('beforeend', renderMessageHTML(msg));
-
-                $('#input-message').value = '';
-                chatMsgs.scrollTop = chatMsgs.scrollHeight;
-                if (STATE.bugout) {
-                    STATE.bugout.send(peerId, { type: 'message', text, seq: msg.seq });
-                }
-            }
-
-            function receiveMessage(peerId, data) {
-                if (!STATE.matches[peerId]) return;
-                const text = typeof data === 'string' ? data : data.text;
-                const seq = typeof data === 'object' ? data.seq : null;
-
-                const msgs = loadMessages(peerId);
-
-                // Avoid duplicates if we already have this seq
-                if (seq !== null && msgs.some(m => m.seq === seq && !m.sent)) return;
-
-                const msg = {
-                    text,
-                    time: new Date().toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' }),
-                    sent: false,
-                    seq: seq !== null ? seq : msgs.length
-                };
-                msgs.push(msg);
-                saveMessages(peerId);
-
-                if (STATE.gun) {
-                    const msgId = Math.random().toString(36).substring(2);
-                    STATE.gun.get('msgs-' + STATE.currentChatPeer).get(msgId).put({
-                        from: STATE.myPeerId,
-                        text: text,
-                        time: Date.now(),
-                        read: false
-                    });
-                }
-            }
-
-            function receiveMessage(peerId, text) {
-                // Si on reçoit un message de quelqu'un qui n'est pas encore un match, on l'ajoute
-                if (!STATE.matches[peerId]) {
-                    // On essaie de récupérer son profil via la découverte
-                    STATE.gun.get(STATE.discoveryNode).get(peerId).once(data => {
-                        let name = "Anonyme";
-                        let avatar = "😊";
-                        if (data && data.profile) {
-                            const p = JSON.parse(data.profile);
-                            name = p.name;
-                            avatar = p.avatar;
-                        }
-                        addOrUpdateMatch(peerId, {name, avatar, messages: []});
-                        processIncomingMessage(peerId, text);
-                    });
+                // Load from memory/cache
+                if (STATE.messages[chatId]) {
+                    STATE.messages[chatId].forEach(msg => displayMessage(msg));
                 } else {
-                    processIncomingMessage(peerId, text);
+                    STATE.messages[chatId] = [];
                 }
-            }
 
-            function processIncomingMessage(peerId, text) {
-                const msg = { text, time: new Date().toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' }), sent: false };
-                STATE.matches[peerId].messages.push(msg);
-                STATE.matches[peerId].unread = (STATE.matches[peerId].unread || 0) + 1;
-                saveMatches();
-                if (STATE.currentChatPeer === peerId) {
-                    const chatMsgs = $('#chat-messages');
-                    chatMsgs.insertAdjacentHTML('beforeend', renderMessageHTML(msg));
-                    chatMsgs.scrollTop = chatMsgs.scrollHeight;
-                } else {
-                    STATE.matches[peerId].unread = (STATE.matches[peerId].unread || 0) + 1;
-                    saveMatches();
-                    toast(`📩 Nouveau message de ${STATE.matches[peerId].name}`);
-                }
-            }
+                $('#chat-overlay').classList.add('active');
+                const container = $('#chat-messages');
+                container.scrollTop = container.scrollHeight;
 
-
-            function escapeHtml(text) {
-                return String(text).replace(/[&<>"']/g, function(m) {
-                    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m];
+                // Écoute des messages sur Gun
+                STATE.gun.get('chats').get(chatId).map().on((data, id) => {
+                    if (data && !STATE.messages[chatId].find(m => m._id === id)) {
+                        const msgWithId = { ...data, _id: id };
+                        STATE.messages[chatId].push(msgWithId);
+                        localStorage.setItem('p2p_messages', JSON.stringify(STATE.messages));
+                        displayMessage(msgWithId);
+                    }
                 });
             }
 
-            // ========== ID COPIE/PARTAGE ==========
-            $('#btn-copy-id').addEventListener('click', () => {
-                if (!STATE.myPeerId) return;
-                navigator.clipboard.writeText(STATE.myPeerId)
-                    .then(() => toast('📋 ID copié'))
-                    .catch(() => toast('❌ Erreur'));
+            function displayMessage(data) {
+                const isMe = data.pub === STATE.myPeerId;
+                const cls = isMe ? 'sent' : 'received';
+                const time = new Date(data.time).toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
+
+                let content = escapeHtml(data.text);
+                if (data.type === 'audio') {
+                    content = `<audio controls src="${data.text}" style="max-width:200px; display:block;"></audio>`;
+                }
+
+                const html = `<div class="message ${cls}">${content}<time>${time}</time></div>`;
+                const container = $('#chat-messages');
+                container.insertAdjacentHTML('beforeend', html);
+                container.scrollTop = container.scrollHeight;
+            }
+            async function sendMessage(text, type = 'text') {
+                if (!text || !STATE.currentChatPeer) return;
+                const chatId = getChatId(STATE.myPeerId, STATE.currentChatPeer);
+                const msg = {
+                    pub: STATE.myPeerId,
+                    text: text,
+                    type: type,
+                    time: Date.now()
+                };
+                try { STATE.gun.get('chats').get(chatId).set(msg); } catch(e) { toast('❌ Erreur d\'envoi'); }
+                $('#input-message').value = '';
+            }
+
+            $('#btn-send').addEventListener('click', () => sendMessage($('#input-message').value.trim()));
+            $('#input-message').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') $('#btn-send').click();
             });
-            $('#btn-share-id').addEventListener('click', () => {
-                if (!STATE.myPeerId) return;
-                if (navigator.share) {
-                    navigator.share({ title: 'Mon ID Tinder P2P', text: STATE.myPeerId }).catch(() => {});
+
+            $('#btn-close-chat').addEventListener('click', () => {
+                $('#chat-overlay').classList.remove('active');
+                STATE.currentChatPeer = null;
+            });
+
+            // ========== AUDIO ==========
+            $('#btn-audio').addEventListener('click', async () => {
+                if (STATE.mediaRecorder && STATE.mediaRecorder.state === 'recording') {
+                    STATE.mediaRecorder.stop();
+                    $('#btn-audio').textContent = '🎤';
+                    $('#btn-audio').classList.remove('btn-primary');
+                    $('#btn-audio').classList.add('btn-ghost');
                 } else {
-                    navigator.clipboard.writeText(STATE.myPeerId)
-                        .then(() => toast('📋 ID copié (partage non supporté)'))
-                        .catch(() => toast('❌ Erreur'));
+                    try {
+                        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                        STATE.mediaRecorder = new MediaRecorder(stream);
+                        STATE.audioChunks = [];
+                        STATE.mediaRecorder.ondataavailable = e => STATE.audioChunks.push(e.data);
+                        STATE.mediaRecorder.onstop = async () => {
+                            const audioBlob = new Blob(STATE.audioChunks, { type: 'audio/webm' });
+                            const reader = new FileReader();
+                            reader.readAsDataURL(audioBlob);
+                            reader.onloadend = () => sendMessage(reader.result, 'audio');
+                        };
+                        STATE.mediaRecorder.start();
+                        $('#btn-audio').textContent = '🛑';
+                        $('#btn-audio').classList.remove('btn-ghost');
+                        $('#btn-audio').classList.add('btn-primary');
+                    } catch(e) {
+                        toast('❌ Micro non autorisé');
+                    }
                 }
             });
 
@@ -980,13 +745,22 @@
                 });
             });
 
-            // ========== DÉMARRAGE ==========
-            loadProfileUI();
-            initGun().catch(e => {
-                console.error(e);
-                $('#display-peer-id').textContent = '❌ Erreur réseau';
-                $('#network-status').textContent = '🔴 Échec';
+            // ========== REGENERATE ID ==========
+            $('#btn-regenerate-id').addEventListener('click', async () => {
+                if (confirm('Régénérer ton identité ? Tes matchs seront perdus.')) {
+                    localStorage.clear();
+                    location.reload();
+                }
             });
+
+            $('#btn-copy-id').addEventListener('click', () => {
+                navigator.clipboard.writeText(STATE.myPeerId).then(() => toast('📋 ID copié'));
+            });
+
+            // ========== DÉMARRAGE ==========
+            updateBioCounter();
+            loadProfileUI();
+            initGun();
             renderMatches();
         })();
     </script>

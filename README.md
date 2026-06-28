@@ -23,7 +23,7 @@ Application de chat P2P décentralisée - **Sans serveur, sans tiers payant**.
 - 🌐 **PWA** installable sur tous les appareils
 - 👤 **Profils** avec photo, pseudo, bio
 - 🔍 **Découverte** de profils en temps réel
-- 💬 **Chat P2P direct** (Bugout/WebRTC)
+- 💬 **Chat P2P direct** (Gun.js)
 - ⭐ **Favoris** persistants
 - 🔒 **100% décentralisé** - Aucun serveur
 
