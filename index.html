@@ -419,10 +419,13 @@
         (function() {
             // ========== ÉTAT ==========
             const STATE = {
-                myPeerId: null,
+                myPeerId: null, seed: localStorage.getItem('p2p_seed'),
                 profile: JSON.parse(localStorage.getItem('p2p_profile') || '{"name":"","bio":"","avatar":"😊"}'),
                 isDiscoverable: false,
                 matches: JSON.parse(localStorage.getItem('p2p_matches') || '{}'),
+                messages: {}, // Loaded on demand
+                messages: {}, // Loaded on demand
+                messages: {}, // Loaded on demand
                 currentChatPeer: null,
                 gun: null,
                 user: null,
@@ -544,6 +547,41 @@
                     $('#network-status').textContent = '🔴 Échec du réseau';
                     throw e;
                 }
+                const bugoutOpts = {}; if (STATE.seed) bugoutOpts.seed = STATE.seed; STATE.bugout = new Bugout(bugoutOpts);
+                return new Promise((resolve, reject) => {
+                    let attempts = 0;
+                    const maxAttempts = 30; // 3 secondes
+                    const check = setInterval(() => {
+                        const addr = STATE.bugout.address();
+                        if (addr) {
+                            clearInterval(check);
+                            STATE.myPeerId = addr;
+                            if (!STATE.seed) { STATE.seed = STATE.bugout.seed; localStorage.setItem('p2p_seed', STATE.seed); }
+                            if (!STATE.seed) { STATE.seed = STATE.bugout.seed; localStorage.setItem('p2p_seed', STATE.seed); }
+                            if (!STATE.seed) { STATE.seed = STATE.bugout.seed; localStorage.setItem("p2p_seed", STATE.seed); }
+                            if (!STATE.seed) { STATE.seed = STATE.bugout.seed; localStorage.setItem("p2p_seed", STATE.seed); }
+                            $('#display-peer-id').textContent = addr;
+                            $('#network-status').textContent = '🟢 Connecté (P2P)';
+                            setupNetworkListeners();
+                            resolve(addr);
+                        }
+                        attempts++;
+                        if (attempts >= maxAttempts) {
+                            clearInterval(check);
+                            const fallback = generateFallbackId();
+                            STATE.myPeerId = fallback;
+                            if (!STATE.seed) { STATE.seed = fallback; localStorage.setItem('p2p_seed', STATE.seed); }
+                            if (!STATE.seed) { STATE.seed = fallback; localStorage.setItem('p2p_seed', STATE.seed); }
+                            if (!STATE.seed) { STATE.seed = fallback; localStorage.setItem("p2p_seed", STATE.seed); }
+                            if (!STATE.seed) { STATE.seed = fallback; localStorage.setItem("p2p_seed", STATE.seed); }
+                            $('#display-peer-id').textContent = fallback;
+                            $('#network-status').textContent = '🟠 Mode local (WebRTC indisponible)';
+                            console.warn('Fallback ID utilisé');
+                            setupFallbackListeners();
+                            resolve(fallback);
+                        }
+                    }, 100);
+                });
             }
 
             function setupGunListeners() {
@@ -557,14 +595,31 @@
                         } catch(e) { console.error("Err parse profile", e); }
                     }
                 });
+                STATE.bugout.on('message', (addr, data) => {
+                    if (!data || typeof data !== 'object') return;
+                    if (data.type === 'ping' && STATE.isDiscoverable) {
+                        STATE.bugout.send(addr, { type: 'pong', profile: STATE.profile });
+                        addOrUpdateMatch(addr, data.profile);
+                        toast(`💌 ${data.profile.name || 'Quelqu\'un'} t'a trouvé !`);
+                    } else if (data.type === 'pong') {
+                        addOrUpdateMatch(addr, data.profile);
+                        toast(`🎉 Profil trouvé !`);
 
-                // Écoute des messages privés (Web3/SEA)
-                // Dans cette version simple, on utilise un nœud dédié à notre clé publique
-                STATE.gun.get('msgs-' + STATE.myPeerId).map().on((data, id) => {
-                    if (!data || data.read) return;
-                    receiveMessage(data.from, data.text);
-                    // On marque comme lu dans Gun pour ne pas le recevoir en boucle
-                    STATE.gun.get('msgs-' + STATE.myPeerId).get(id).put({read: true});
+                    } else if (data.type === 'message') {
+                        receiveMessage(addr, data);
+                    } else if (data.type === 'sync_req') {
+                        const msgs = loadMessages(addr);
+                        if (data.lastIndex < msgs.length) {
+                            // Send missing messages (deltas)
+                            const deltas = msgs.slice(data.lastIndex);
+                            deltas.forEach(m => {
+                                if (m.sent) { // Only send messages WE sent
+                                    STATE.bugout.send(addr, { type: 'message', text: m.text, seq: m.seq });
+                                }
+                            });
+                        }
+                    }
+
                 });
             }
 
@@ -586,6 +641,15 @@
                     localStorage.removeItem('p2p_matches');
                     location.reload();
                 }
+                STATE.myPeerId = null;
+                localStorage.removeItem('p2p_seed'); STATE.seed = null;
+                localStorage.removeItem('p2p_seed'); STATE.seed = null;
+                localStorage.removeItem("p2p_seed"); STATE.seed = null;
+                localStorage.removeItem("p2p_seed"); STATE.seed = null;
+                STATE.seenPeers.clear();
+                $('#display-peer-id').textContent = '⏳ Régénération...';
+                await initBugout();
+                toast('✅ Nouvel ID généré');
             });
 
             // ========== DÉCOUVRABILITÉ ==========
@@ -633,7 +697,6 @@
                         name: profile.name || 'Anonyme',
                         bio: profile.bio || '',
                         avatar: profile.avatar || '😊',
-                        messages: [],
                         starred: false,
                         unread: 0,
                         lastActivity: Date.now()
@@ -651,9 +714,38 @@
                 renderDiscover();
             }
 
+
             function saveMatches() {
                 localStorage.setItem('p2p_matches', JSON.stringify(STATE.matches));
             }
+
+            function saveMessages(peerId) {
+                if (STATE.messages[peerId]) {
+                    localStorage.setItem('p2p_msgs_' + peerId, JSON.stringify(STATE.messages[peerId]));
+                }
+            }
+
+            function loadMessages(peerId) {
+                if (!STATE.messages[peerId]) {
+                    STATE.messages[peerId] = JSON.parse(localStorage.getItem('p2p_msgs_' + peerId) || '[]');
+                }
+                return STATE.messages[peerId];
+            }
+
+
+            }
+
+
+                return STATE.messages[peerId];
+            }
+
+
+            }
+
+
+                return STATE.messages[peerId];
+            }
+
 
             function renderMatches() {
                 const container = $('#matches-list');
@@ -664,7 +756,7 @@
                 }
                 container.innerHTML = ids.map(id => {
                     const m = STATE.matches[id];
-                    const lastMsg = m.messages.length ? m.messages[m.messages.length-1].text : 'Pas encore de messages';
+                    const msgs = loadMessages(id); const lastMsg = msgs.length ? msgs[msgs.length-1].text : 'Pas encore de messages';
                     return `
                     <div class="card">
                         <div class="card-avatar">${m.avatar}</div>
@@ -715,23 +807,36 @@
             }
 
             // ========== CHAT ==========
+
             function openChat(peerId) {
                 STATE.currentChatPeer = peerId;
                 const m = STATE.matches[peerId];
                 if (!m) return;
                 $('#chat-peer-name').textContent = m.name || 'Anonyme';
                 const chatMsgs = $('#chat-messages');
-                chatMsgs.innerHTML = m.messages.map(msg => {
-                    const cls = msg.sent ? 'sent' : 'received';
-                    return `<div class="message ${cls}">${escapeHtml(msg.text)}<time>${msg.time || ''}</time></div>`;
-                }).join('');
+                const msgs = loadMessages(peerId);
+
+                // Efficient initial render
+                chatMsgs.innerHTML = msgs.map(msg => renderMessageHTML(msg)).join('');
+
                 document.getElementById('chat-overlay').classList.add('active');
                 chatMsgs.scrollTop = chatMsgs.scrollHeight;
                 if (m.unread) {
                     m.unread = 0;
                     saveMatches();
                 }
+
+                // Delta Sync: Request missing messages
+                if (STATE.bugout) {
+                    STATE.bugout.send(peerId, { type: 'sync_req', lastIndex: msgs.length });
+                }
             }
+
+            function renderMessageHTML(msg) {
+                const cls = msg.sent ? 'sent' : 'received';
+                return `<div class="message ${cls}">${escapeHtml(msg.text)}<time>${msg.time || ''}</time></div>`;
+            }
+
 
             function closeChat() {
                 document.getElementById('chat-overlay').classList.remove('active');
@@ -745,16 +850,51 @@
                 if (e.key === 'Enter') sendMessage();
             });
 
+
             function sendMessage() {
                 const text = $('#input-message').value.trim();
                 if (!text || !STATE.currentChatPeer) return;
-                const msg = { text, time: new Date().toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' }), sent: true };
-                STATE.matches[STATE.currentChatPeer].messages.push(msg);
-                saveMatches();
+                const peerId = STATE.currentChatPeer;
+                const msgs = loadMessages(peerId);
+                const msg = {
+                    text,
+                    time: new Date().toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' }),
+                    sent: true,
+                    seq: msgs.length
+                };
+                msgs.push(msg);
+                saveMessages(peerId);
+
+                // Delta Rendering
                 const chatMsgs = $('#chat-messages');
-                chatMsgs.innerHTML += `<div class="message sent">${escapeHtml(text)}<time>${msg.time}</time></div>`;
+                chatMsgs.insertAdjacentHTML('beforeend', renderMessageHTML(msg));
+
                 $('#input-message').value = '';
                 chatMsgs.scrollTop = chatMsgs.scrollHeight;
+                if (STATE.bugout) {
+                    STATE.bugout.send(peerId, { type: 'message', text, seq: msg.seq });
+                }
+            }
+
+            function receiveMessage(peerId, data) {
+                if (!STATE.matches[peerId]) return;
+                const text = typeof data === 'string' ? data : data.text;
+                const seq = typeof data === 'object' ? data.seq : null;
+
+                const msgs = loadMessages(peerId);
+
+                // Avoid duplicates if we already have this seq
+                if (seq !== null && msgs.some(m => m.seq === seq && !m.sent)) return;
+
+                const msg = {
+                    text,
+                    time: new Date().toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' }),
+                    sent: false,
+                    seq: seq !== null ? seq : msgs.length
+                };
+                msgs.push(msg);
+                saveMessages(peerId);
+
                 if (STATE.gun) {
                     const msgId = Math.random().toString(36).substring(2);
                     STATE.gun.get('msgs-' + STATE.currentChatPeer).get(msgId).put({
@@ -793,14 +933,15 @@
                 saveMatches();
                 if (STATE.currentChatPeer === peerId) {
                     const chatMsgs = $('#chat-messages');
-                    chatMsgs.innerHTML += `<div class="message received">${escapeHtml(text)}<time>${msg.time}</time></div>`;
+                    chatMsgs.insertAdjacentHTML('beforeend', renderMessageHTML(msg));
                     chatMsgs.scrollTop = chatMsgs.scrollHeight;
-                    STATE.matches[peerId].unread = 0;
-                    saveMatches();
                 } else {
+                    STATE.matches[peerId].unread = (STATE.matches[peerId].unread || 0) + 1;
+                    saveMatches();
                     toast(`📩 Nouveau message de ${STATE.matches[peerId].name}`);
                 }
             }
+
 
             function escapeHtml(text) {
                 return String(text).replace(/[&<>"']/g, function(m) {
