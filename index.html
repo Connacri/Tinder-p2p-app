@@ -407,8 +407,9 @@
         </nav>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/gun/sea.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gun@0.2020.1239/gun.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gun@0.2020.1239/sea.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gun@0.2020.1239/lib/webrtc.js"></script>
     <script>
         (function() {
             // ========== ÉTAT ==========
@@ -466,20 +467,39 @@
                 $('#network-status').textContent = '🔵 Connexion au réseau P2P...';
                 $('#display-peer-id').textContent = '⏳ Initialisation...';
 
+                // Vérification des dépendances
+                if (typeof Gun === 'undefined' || typeof SEA === 'undefined') {
+                    $('#display-peer-id').textContent = '❌ Bibliothèques manquantes';
+                    $('#network-status').textContent = '🔴 Vérifie ta connexion internet';
+                    return;
+                }
+
                 try {
                     STATE.gun = Gun({
                         peers: [
                             'https://gun-manhattan.herokuapp.com/gun',
                             'https://peer.wall.org/gun',
-                            'https://dletta.herokuapp.com/gun'
-                        ]
+                            'https://dletta.herokuapp.com/gun',
+                            'https://gun-us.herokuapp.com/gun'
+                        ],
+                        rtc: {
+                            iceServers: [
+                                { urls: 'stun:stun.l.google.com:19302' },
+                                { urls: 'stun:stun1.l.google.com:19302' },
+                                { urls: 'stun:stun2.l.google.com:19302' }
+                            ]
+                        }
                     });
 
                     // Génération ou récupération d'une paire de clés (Web3 identity)
                     let pair = localStorage.getItem('p2p_keypair');
                     if (pair) {
-                        pair = JSON.parse(pair);
-                    } else {
+                        try {
+                            pair = JSON.parse(pair);
+                        } catch(e) { pair = null; }
+                    }
+
+                    if (!pair) {
                         pair = await SEA.pair();
                         localStorage.setItem('p2p_keypair', JSON.stringify(pair));
                     }
@@ -492,8 +512,8 @@
                     return STATE.myPeerId;
                 } catch (e) {
                     console.error("Gun Init Error:", e);
-                    $('#display-peer-id').textContent = '❌ Erreur de connexion';
-                    $('#network-status').textContent = '🔴 Échec du réseau';
+                    $('#display-peer-id').textContent = '❌ Erreur réseau';
+                    $('#network-status').textContent = '🔴 Échec';
                     throw e;
                 }
             }
