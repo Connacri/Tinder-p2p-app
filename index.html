@@ -77,7 +77,10 @@
             z-index: 100;
             backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
-            background: rgba(var(--surface-rgb, 255,255,255), 0.9);
+            background: rgba(255,255,255, 0.9);
+        }
+        @media (prefers-color-scheme: dark) {
+            nav { background: rgba(30,30,30,0.9); }
         }
         nav button {
             flex: 1;
@@ -188,6 +191,8 @@
             cursor: pointer;
             box-shadow: var(--shadow-md);
             font-size: 18px;
+            border: none;
+            font-family: inherit;
         }
         .card {
             background: var(--surface);
@@ -305,6 +310,19 @@
             color: var(--text);
             font-family: inherit;
         }
+        .chat-input-bar input:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+        .badge {
+            background: var(--primary);
+            color: white;
+            font-size: 11px;
+            font-weight: 700;
+            border-radius: 50px;
+            padding: 2px 7px;
+            margin-left: 6px;
+        }
         .toast {
             position: fixed;
             top: 20px;
@@ -318,6 +336,7 @@
             z-index: 999;
             animation: toastIn 0.3s ease;
             backdrop-filter: blur(12px);
+            pointer-events: none;
         }
         @keyframes toastIn {
             from { opacity: 0; transform: translate(-50%, -20px); }
@@ -344,7 +363,7 @@
             </div>
             <div class="profile-img-container">
                 <div class="profile-img" id="profile-avatar">😊</div>
-                <button class="profile-img-overlay" id="btn-change-avatar" aria-label="Changer l'avatar" style="border:none; font-family:inherit;">📷</button>
+                <button class="profile-img-overlay" id="btn-change-avatar" aria-label="Changer l'avatar">📷</button>
             </div>
             <div class="input-group">
                 <label for="input-name" style="display:block; font-size:12px; margin-bottom:4px; color:var(--text-secondary); font-weight:600; text-align:left; padding-left:4px;">PRÉNOM</label>
@@ -361,7 +380,7 @@
             <div class="id-box">
                 <strong>🔑 Ton ID unique</strong>
                 <div class="id-value" id="display-peer-id">⏳ Initialisation...</div>
-                <div style="display:flex; gap:8px; justify-content:center; margin-top:12px;">
+                <div style="display:flex; gap:8px; justify-content:center; margin-top:12px; flex-wrap:wrap;">
                     <button class="btn btn-ghost" id="btn-copy-id" aria-label="Copier l'ID">📋 Copier</button>
                     <button class="btn btn-ghost" id="btn-share-id" aria-label="Partager l'ID">📤 Partager</button>
                     <button class="btn btn-ghost" id="btn-regenerate-id" aria-label="Régénérer l'ID">🔄 Régénérer</button>
@@ -374,7 +393,7 @@
         <section id="screen-discover" class="screen">
             <div class="header">
                 <h2>🔍 Découvrir</h2>
-                <button class="btn btn-success" id="btn-toggle-discover">OFF</button>
+                <button class="btn" id="btn-toggle-discover">OFF</button>
             </div>
             <div class="input-group">
                 <label for="input-peer-id" style="display:block; font-size:12px; margin-bottom:4px; color:var(--text-secondary); font-weight:600; text-align:left; padding-left:4px;">REJOINDRE UN AMI</label>
@@ -416,579 +435,504 @@
     <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/gun/sea.js"></script>
     <script>
-        (function() {
-            // ========== ÉTAT ==========
-            const STATE = {
-                myPeerId: null, seed: localStorage.getItem('p2p_seed'),
-                profile: JSON.parse(localStorage.getItem('p2p_profile') || '{"name":"","bio":"","avatar":"😊"}'),
-                isDiscoverable: false,
-                matches: JSON.parse(localStorage.getItem('p2p_matches') || '{}'),
-                messages: {}, // Loaded on demand
-                messages: {}, // Loaded on demand
-                messages: {}, // Loaded on demand
-                currentChatPeer: null,
-                gun: null,
-                user: null,
-                discoveryNode: 'tinder-p2p-discovery-v3'
-            };
+    (function() {
+        'use strict';
 
-            // ========== UTILITAIRES ==========
-            const $ = (s) => document.querySelector(s);
-            const $$ = (s) => document.querySelectorAll(s);
-            const toast = (msg) => {
-                const t = document.createElement('div');
-                t.className = 'toast'; t.setAttribute('role', 'alert'); t.setAttribute('aria-live', 'assertive');
-                t.textContent = msg;
-                document.body.appendChild(t);
-                setTimeout(() => t.remove(), 3000);
-            };
+        // ========== ÉTAT CENTRALISÉ ==========
+        const STATE = {
+            myPeerId: null,
+            profile: JSON.parse(localStorage.getItem('p2p_profile') || '{"name":"","bio":"","avatar":"😊"}'),
+            isDiscoverable: false,
+            matches: JSON.parse(localStorage.getItem('p2p_matches') || '{}'),
+            messages: {},         // cache en mémoire : { peerId: [msg, ...] }
+            currentChatPeer: null,
+            gun: null,
+            discoveryNode: 'tinder-p2p-discovery-v3',
+            msgListeners: {}      // pour éviter les listeners Gun dupliqués
+        };
 
-            // ========== PROFIL UI ==========
-            function loadProfileUI() {
-                $('#input-name').value = STATE.profile.name;
-                $('#input-bio').value = STATE.profile.bio;
-                $('#profile-avatar').textContent = STATE.profile.avatar;
+        // ========== UTILITAIRES ==========
+        const $ = (s) => document.querySelector(s);
+        const $$ = (s) => document.querySelectorAll(s);
+
+        let _toastTimer = null;
+        function toast(msg) {
+            const existing = document.querySelector('.toast');
+            if (existing) existing.remove();
+            const t = document.createElement('div');
+            t.className = 'toast';
+            t.setAttribute('role', 'alert');
+            t.setAttribute('aria-live', 'assertive');
+            t.textContent = msg;
+            document.body.appendChild(t);
+            clearTimeout(_toastTimer);
+            _toastTimer = setTimeout(() => t.remove(), 3000);
+        }
+
+        function escapeHtml(text) {
+            return String(text).replace(/[&<>"']/g, function(m) {
+                return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[m];
+            });
+        }
+
+        function nowTime() {
+            return new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+        }
+
+        // ========== STOCKAGE MESSAGES ==========
+        function loadMessages(peerId) {
+            if (!STATE.messages[peerId]) {
+                STATE.messages[peerId] = JSON.parse(
+                    localStorage.getItem('p2p_msgs_' + peerId) || '[]'
+                );
+            }
+            return STATE.messages[peerId];
+        }
+
+        function saveMessages(peerId) {
+            if (STATE.messages[peerId]) {
+                localStorage.setItem('p2p_msgs_' + peerId, JSON.stringify(STATE.messages[peerId]));
+            }
+        }
+
+        function saveMatches() {
+            localStorage.setItem('p2p_matches', JSON.stringify(STATE.matches));
+        }
+
+        // ========== PROFIL UI ==========
+        function loadProfileUI() {
+            $('#input-name').value = STATE.profile.name;
+            $('#input-bio').value = STATE.profile.bio;
+            $('#profile-avatar').textContent = STATE.profile.avatar;
+            updateBioCounter();
+        }
+
+        const inputBio = $('#input-bio');
+        const bioCounter = $('#bio-counter');
+
+        function updateBioCounter() {
+            const len = inputBio.value.length;
+            bioCounter.textContent = `${len}/150`;
+            bioCounter.style.color = len >= 140 ? 'var(--primary)' : 'var(--text-secondary)';
+        }
+
+        inputBio.addEventListener('input', updateBioCounter);
+
+        $('#btn-save-profile').addEventListener('click', () => {
+            const name = $('#input-name').value.trim();
+            if (!name) return toast('⚠️ Entre un prénom');
+            STATE.profile.name = name;
+            STATE.profile.bio = $('#input-bio').value.trim();
+            localStorage.setItem('p2p_profile', JSON.stringify(STATE.profile));
+            // Si on est visible, on met à jour notre annonce
+            if (STATE.isDiscoverable && STATE.myPeerId) {
+                announcePresence();
+            }
+            toast('✅ Profil sauvegardé');
+        });
+
+        const avatars = ['😊','😎','🥳','🤩','😇','🦊','🐱','🐶','🦄','🐼','🌸','🔥','💎','🍕','🎸','⚽'];
+        $('#btn-change-avatar').addEventListener('click', () => {
+            const idx = avatars.indexOf(STATE.profile.avatar);
+            STATE.profile.avatar = avatars[(idx + 1) % avatars.length];
+            $('#profile-avatar').textContent = STATE.profile.avatar;
+        });
+
+        $('#btn-change-avatar').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('#btn-change-avatar').click(); }
+        });
+
+        // ========== INITIALISATION GUN ==========
+        async function initGun() {
+            $('#network-status').textContent = '🔵 Connexion au réseau P2P...';
+            $('#display-peer-id').textContent = '⏳ Initialisation...';
+
+            STATE.gun = Gun([
+                'https://gun-manhattan.herokuapp.com/gun',
+                'https://gun-us.herokuapp.com/gun',
+                'wss://gun-manhattan.herokuapp.com/gun'
+            ]);
+
+            // Génération ou récupération de la paire de clés (identité persistante)
+            let pair = null;
+            const stored = localStorage.getItem('p2p_keypair');
+            if (stored) {
+                try { pair = JSON.parse(stored); } catch(e) { pair = null; }
+            }
+            if (!pair || !pair.pub) {
+                pair = await SEA.pair();
+                localStorage.setItem('p2p_keypair', JSON.stringify(pair));
             }
 
+            STATE.myPeerId = pair.pub;
+            $('#display-peer-id').textContent = STATE.myPeerId.substring(0, 20) + '...';
+            $('#network-status').textContent = '🟢 Connecté au réseau P2P';
 
-            // ========== LIVE FEEDBACK & ACCESSIBILITY ==========
-            const inputName = $('#input-name');
-            const inputBio = $('#input-bio');
-            const bioCounter = $('#bio-counter');
-            const profileAvatarDisplay = $('#profile-avatar');
+            setupDiscoveryListener();
+        }
 
-            function updateBioCounter() {
-                const len = inputBio.value.length;
-                bioCounter.textContent = `${len}/150`;
-                if (len >= 140) bioCounter.style.color = 'var(--primary)';
-                else bioCounter.style.color = 'var(--text-secondary)';
-            }
-
-            inputBio.addEventListener('input', updateBioCounter);
-            inputName.addEventListener('input', () => {
-                // No direct display in the profile screen's header,
-                // but let's assume we want to show feedback or just keep it for consistency.
-                // In this app, the 'live preview' is essentially the profile screen itself
-                // as it uses the same inputs. But we can add a subtle 'Saved' / 'Unsaved' indicator.
-                $('#btn-save-profile').style.opacity = '1';
-                $('#btn-save-profile').textContent = '💾 Sauvegarder';
+        // ========== DÉCOUVERTE ==========
+        function announcePresence() {
+            STATE.gun.get(STATE.discoveryNode).get(STATE.myPeerId).put({
+                profile: JSON.stringify({
+                    name: STATE.profile.name,
+                    bio: STATE.profile.bio,
+                    avatar: STATE.profile.avatar
+                }),
+                timestamp: Date.now()
             });
+        }
 
-            inputBio.addEventListener('input', () => {
-                $('#btn-save-profile').style.opacity = '1';
-                $('#btn-save-profile').textContent = '💾 Sauvegarder';
-            });
-
-
-            // Initial call
-            setTimeout(updateBioCounter, 500);
-
-            // Add visual feedback to avatar change (accessibility)
-            const btnChangeAvatar = $('#btn-change-avatar');
-            btnChangeAvatar.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    btnChangeAvatar.click();
-                }
-            });
-
-            $('#btn-save-profile').addEventListener('click', () => {
-                STATE.profile.name = $('#input-name').value.trim();
-                STATE.profile.bio = $('#input-bio').value.trim();
-                if (!STATE.profile.name) return toast('⚠️ Entre un prénom');
-                localStorage.setItem('p2p_profile', JSON.stringify(STATE.profile));
-                toast('✅ Profil sauvegardé');
-            });
-
-            const avatars = ['😊','😎','🥳','🤩','😇','🦊','🐱','🐶','🦄','🐼','🌸','🔥','💎','🍕','🎸','⚽'];
-            $('#btn-change-avatar').addEventListener('click', () => {
-                const idx = avatars.indexOf(STATE.profile.avatar);
-                STATE.profile.avatar = avatars[(idx + 1) % avatars.length];
-                $('#profile-avatar').textContent = STATE.profile.avatar;
-                toast('Avatar changé');
-            });
-
-            // ========== IDENTIFIANT UNIQUE ==========
-            function generateFallbackId() {
-                return 'local-' + Math.random().toString(36).substr(2, 9) + '-' + Date.now().toString(36);
-            }
-
-            async function initGun() {
-                $('#network-status').textContent = '🔵 Connexion au réseau P2P...';
-                $('#display-peer-id').textContent = '⏳ Initialisation...';
-
+        function setupDiscoveryListener() {
+            STATE.gun.get(STATE.discoveryNode).map().on((data, pub) => {
+                if (!data || pub === STATE.myPeerId) return;
+                if (!data.profile) return;
+                // Ignorer les annonces trop vieilles (> 1h)
+                if (data.timestamp && Date.now() - data.timestamp > 3600000) return;
                 try {
-                    STATE.gun = Gun({
-                        peers: [
-                            'https://gun-manhattan.herokuapp.com/gun',
-                            'https://peer.wall.org/gun',
-                            'https://dletta.herokuapp.com/gun'
-                        ]
-                    });
-
-                    // Génération ou récupération d'une paire de clés (Web3 identity)
-                    let pair = localStorage.getItem('p2p_keypair');
-                    if (pair) {
-                        pair = JSON.parse(pair);
-                    } else {
-                        pair = await SEA.pair();
-                        localStorage.setItem('p2p_keypair', JSON.stringify(pair));
-                    }
-
-                    STATE.myPeerId = pair.pub;
-                    $('#display-peer-id').textContent = STATE.myPeerId.substring(0, 15) + '...';
-                    $('#network-status').textContent = '🟢 Connecté au réseau P2P';
-
-                    setupGunListeners();
-                    return STATE.myPeerId;
-                } catch (e) {
-                    console.error("Gun Init Error:", e);
-                    $('#display-peer-id').textContent = '❌ Erreur de connexion';
-                    $('#network-status').textContent = '🔴 Échec du réseau';
-                    throw e;
-                }
-                const bugoutOpts = {}; if (STATE.seed) bugoutOpts.seed = STATE.seed; STATE.bugout = new Bugout(bugoutOpts);
-                return new Promise((resolve, reject) => {
-                    let attempts = 0;
-                    const maxAttempts = 30; // 3 secondes
-                    const check = setInterval(() => {
-                        const addr = STATE.bugout.address();
-                        if (addr) {
-                            clearInterval(check);
-                            STATE.myPeerId = addr;
-                            if (!STATE.seed) { STATE.seed = STATE.bugout.seed; localStorage.setItem('p2p_seed', STATE.seed); }
-                            if (!STATE.seed) { STATE.seed = STATE.bugout.seed; localStorage.setItem('p2p_seed', STATE.seed); }
-                            if (!STATE.seed) { STATE.seed = STATE.bugout.seed; localStorage.setItem("p2p_seed", STATE.seed); }
-                            if (!STATE.seed) { STATE.seed = STATE.bugout.seed; localStorage.setItem("p2p_seed", STATE.seed); }
-                            $('#display-peer-id').textContent = addr;
-                            $('#network-status').textContent = '🟢 Connecté (P2P)';
-                            setupNetworkListeners();
-                            resolve(addr);
-                        }
-                        attempts++;
-                        if (attempts >= maxAttempts) {
-                            clearInterval(check);
-                            const fallback = generateFallbackId();
-                            STATE.myPeerId = fallback;
-                            if (!STATE.seed) { STATE.seed = fallback; localStorage.setItem('p2p_seed', STATE.seed); }
-                            if (!STATE.seed) { STATE.seed = fallback; localStorage.setItem('p2p_seed', STATE.seed); }
-                            if (!STATE.seed) { STATE.seed = fallback; localStorage.setItem("p2p_seed", STATE.seed); }
-                            if (!STATE.seed) { STATE.seed = fallback; localStorage.setItem("p2p_seed", STATE.seed); }
-                            $('#display-peer-id').textContent = fallback;
-                            $('#network-status').textContent = '🟠 Mode local (WebRTC indisponible)';
-                            console.warn('Fallback ID utilisé');
-                            setupFallbackListeners();
-                            resolve(fallback);
-                        }
-                    }, 100);
-                });
-            }
-
-            function setupGunListeners() {
-                // Écoute de la découverte globale
-                STATE.gun.get(STATE.discoveryNode).map().on((data, pub) => {
-                    if (pub === STATE.myPeerId) return;
-                    if (data && data.profile) {
-                        try {
-                            const profile = JSON.parse(data.profile);
-                            addOrUpdateDiscover(pub, profile);
-                        } catch(e) { console.error("Err parse profile", e); }
-                    }
-                });
-                STATE.bugout.on('message', (addr, data) => {
-                    if (!data || typeof data !== 'object') return;
-                    if (data.type === 'ping' && STATE.isDiscoverable) {
-                        STATE.bugout.send(addr, { type: 'pong', profile: STATE.profile });
-                        addOrUpdateMatch(addr, data.profile);
-                        toast(`💌 ${data.profile.name || 'Quelqu\'un'} t'a trouvé !`);
-                    } else if (data.type === 'pong') {
-                        addOrUpdateMatch(addr, data.profile);
-                        toast(`🎉 Profil trouvé !`);
-
-                    } else if (data.type === 'message') {
-                        receiveMessage(addr, data);
-                    } else if (data.type === 'sync_req') {
-                        const msgs = loadMessages(addr);
-                        if (data.lastIndex < msgs.length) {
-                            // Send missing messages (deltas)
-                            const deltas = msgs.slice(data.lastIndex);
-                            deltas.forEach(m => {
-                                if (m.sent) { // Only send messages WE sent
-                                    STATE.bugout.send(addr, { type: 'message', text: m.text, seq: m.seq });
-                                }
-                            });
-                        }
-                    }
-
-                });
-            }
-
-            function addOrUpdateDiscover(pub, profile) {
-                // On ne l'ajoute aux matchs que si on a un échange ou si on "like"
-                // Pour l'instant on l'affiche juste dans Discover
-                if (!STATE.matches[pub]) {
-                    renderDiscover(pub, profile);
-                }
-            }
-
-            function setupFallbackListeners() {
-                console.log('Mode fallback : connexion manuelle uniquement');
-            }
-
-            $('#btn-regenerate-id').addEventListener('click', async () => {
-                if (confirm('Cela va supprimer ton identité actuelle et tes contacts. Continuer ?')) {
-                    localStorage.removeItem('p2p_keypair');
-                    localStorage.removeItem('p2p_matches');
-                    location.reload();
-                }
-                STATE.myPeerId = null;
-                localStorage.removeItem('p2p_seed'); STATE.seed = null;
-                localStorage.removeItem('p2p_seed'); STATE.seed = null;
-                localStorage.removeItem("p2p_seed"); STATE.seed = null;
-                localStorage.removeItem("p2p_seed"); STATE.seed = null;
-                STATE.seenPeers.clear();
-                $('#display-peer-id').textContent = '⏳ Régénération...';
-                await initBugout();
-                toast('✅ Nouvel ID généré');
+                    const profile = JSON.parse(data.profile);
+                    if (!profile.name) return;
+                    addToDiscovered(pub, profile);
+                } catch(e) { /* profil malformé, on ignore */ }
             });
+        }
 
-            // ========== DÉCOUVRABILITÉ ==========
-            $('#btn-toggle-discover').addEventListener('click', () => {
-                STATE.isDiscoverable = !STATE.isDiscoverable;
-                const btn = $('#btn-toggle-discover');
-                btn.textContent = STATE.isDiscoverable ? 'ON' : 'OFF';
-                btn.className = `btn ${STATE.isDiscoverable ? 'btn-success' : ''}`;
+        $('#btn-toggle-discover').addEventListener('click', () => {
+            if (!STATE.myPeerId) return toast('⚠️ En cours d\'initialisation...');
+            if (!STATE.profile.name) return toast('⚠️ Sauvegarde ton profil d\'abord');
 
-                if (STATE.isDiscoverable) {
-                    STATE.gun.get(STATE.discoveryNode).get(STATE.myPeerId).put({
-                        profile: JSON.stringify(STATE.profile),
-                        timestamp: Date.now()
-                    });
-                    toast('📡 Tu es visible !');
-                } else {
-                    STATE.gun.get(STATE.discoveryNode).get(STATE.myPeerId).put(null);
-                    toast('🔒 Tu es invisible.');
-                }
-            });
+            STATE.isDiscoverable = !STATE.isDiscoverable;
+            const btn = $('#btn-toggle-discover');
+            btn.textContent = STATE.isDiscoverable ? 'ON' : 'OFF';
+            btn.className = `btn ${STATE.isDiscoverable ? 'btn-success' : ''}`;
 
-            // ========== CONNEXION MANUELLE ==========
-            $('#btn-connect').addEventListener('click', () => {
-                const peerId = $('#input-peer-id').value.trim();
-                if (!peerId) return toast('⚠️ Entre un ID');
-                if (peerId === STATE.myPeerId) return toast('⚠️ C\'est ton ID');
+            if (STATE.isDiscoverable) {
+                announcePresence();
+                toast('📡 Tu es visible !');
+            } else {
+                // On retire notre annonce
+                STATE.gun.get(STATE.discoveryNode).get(STATE.myPeerId).put(null);
+                toast('🔒 Tu es invisible.');
+            }
+        });
 
-                toast('🔍 Recherche du profil...');
-                STATE.gun.get(STATE.discoveryNode).get(peerId).once((data) => {
-                    if (data && data.profile) {
+        // ========== CONNEXION MANUELLE ==========
+        $('#btn-connect').addEventListener('click', () => {
+            const peerId = $('#input-peer-id').value.trim();
+            if (!peerId) return toast('⚠️ Entre un ID');
+            if (peerId === STATE.myPeerId) return toast('⚠️ C\'est ton propre ID');
+
+            toast('🔍 Recherche du profil...');
+            STATE.gun.get(STATE.discoveryNode).get(peerId).once((data) => {
+                if (data && data.profile) {
+                    try {
                         const profile = JSON.parse(data.profile);
                         addOrUpdateMatch(peerId, profile);
+                        $('#input-peer-id').value = '';
                         toast('✅ Ami ajouté !');
                         openChat(peerId);
-                    } else {
-                        toast('❌ Profil introuvable');
+                    } catch(e) {
+                        toast('❌ Profil invalide');
                     }
-                });
-            });
-
-            // ========== MATCHS ==========
-            function addOrUpdateMatch(peerId, profile) {
-                if (!STATE.matches[peerId]) {
-                    STATE.matches[peerId] = {
-                        name: profile.name || 'Anonyme',
-                        bio: profile.bio || '',
-                        avatar: profile.avatar || '😊',
-                        starred: false,
-                        unread: 0,
-                        lastActivity: Date.now()
-                    };
                 } else {
-                    Object.assign(STATE.matches[peerId], {
-                        name: profile.name || STATE.matches[peerId].name,
-                        bio: profile.bio || STATE.matches[peerId].bio,
-                        avatar: profile.avatar || STATE.matches[peerId].avatar,
-                        lastActivity: Date.now()
-                    });
+                    toast('❌ Profil introuvable (l\'utilisateur doit être visible)');
                 }
-                saveMatches();
-                renderMatches();
+            });
+        });
+
+        // ========== MATCHS ==========
+        function addOrUpdateMatch(peerId, profile) {
+            if (!STATE.matches[peerId]) {
+                STATE.matches[peerId] = {
+                    name: profile.name || 'Anonyme',
+                    bio: profile.bio || '',
+                    avatar: profile.avatar || '😊',
+                    unread: 0,
+                    lastActivity: Date.now()
+                };
+            } else {
+                STATE.matches[peerId].name    = profile.name    || STATE.matches[peerId].name;
+                STATE.matches[peerId].bio     = profile.bio     || STATE.matches[peerId].bio;
+                STATE.matches[peerId].avatar  = profile.avatar  || STATE.matches[peerId].avatar;
+                STATE.matches[peerId].lastActivity = Date.now();
+            }
+            saveMatches();
+            renderMatches();
+            // Démarrer l'écoute des messages Gun pour ce pair
+            startMessageListener(peerId);
+        }
+
+        // ========== DÉCOUVRIR UI ==========
+        const discoveredPeers = {};
+
+        function addToDiscovered(pub, profile) {
+            discoveredPeers[pub] = profile;
+            // Si l'écran découverte est actif, rafraîchir
+            if ($('#screen-discover').classList.contains('active')) {
                 renderDiscover();
             }
+        }
 
-
-            function saveMatches() {
-                localStorage.setItem('p2p_matches', JSON.stringify(STATE.matches));
+        function renderDiscover() {
+            const container = $('#discover-list');
+            const ids = Object.keys(discoveredPeers).filter(id => !STATE.matches[id]);
+            if (ids.length === 0) {
+                container.innerHTML = '<div class="empty-state" role="status" aria-live="polite">🔍 Aucun profil découvert.<br>Active la découverte ou entre un ID manuellement.</div>';
+                return;
             }
-
-            function saveMessages(peerId) {
-                if (STATE.messages[peerId]) {
-                    localStorage.setItem('p2p_msgs_' + peerId, JSON.stringify(STATE.messages[peerId]));
-                }
-            }
-
-            function loadMessages(peerId) {
-                if (!STATE.messages[peerId]) {
-                    STATE.messages[peerId] = JSON.parse(localStorage.getItem('p2p_msgs_' + peerId) || '[]');
-                }
-                return STATE.messages[peerId];
-            }
-
-
-            }
-
-
-                return STATE.messages[peerId];
-            }
-
-
-            }
-
-
-                return STATE.messages[peerId];
-            }
-
-
-            function renderMatches() {
-                const container = $('#matches-list');
-                const ids = Object.keys(STATE.matches);
-                if (ids.length === 0) {
-                    container.innerHTML = '<div class="empty-state" role="status" aria-live="polite">💔 Aucun match pour le moment.<br>Va dans "Découvrir" !</div>';
-                    return;
-                }
-                container.innerHTML = ids.map(id => {
-                    const m = STATE.matches[id];
-                    const msgs = loadMessages(id); const lastMsg = msgs.length ? msgs[msgs.length-1].text : 'Pas encore de messages';
-                    return `
-                    <div class="card">
-                        <div class="card-avatar">${m.avatar}</div>
-                        <div class="card-info">
-                            <h3>${m.name} ${m.starred ? '⭐' : ''}</h3>
-                            <p>${lastMsg}</p>
-                        </div>
-                        <button class="btn btn-primary" style="padding:8px 16px;" data-peer="${id}" aria-label="Ouvrir la discussion avec ${m.name}">💬</button>
-                    </div>`;
-                }).join('');
-                // Attacher les événements
-                container.querySelectorAll('.btn-primary').forEach(btn => {
-                    btn.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        openChat(btn.dataset.peer);
-                    });
+            container.innerHTML = ids.map(id => {
+                const m = discoveredPeers[id];
+                return `
+                <div class="card">
+                    <div class="card-avatar">${escapeHtml(m.avatar || '😊')}</div>
+                    <div class="card-info">
+                        <h3>${escapeHtml(m.name)}</h3>
+                        <p>${escapeHtml(m.bio || 'Pas de bio')}</p>
+                    </div>
+                    <button class="btn btn-primary" style="padding:8px 16px;" data-peer="${escapeHtml(id)}" aria-label="Connecter avec ${escapeHtml(m.name)}">💬</button>
+                </div>`;
+            }).join('');
+            container.querySelectorAll('[data-peer]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const pid = btn.dataset.peer;
+                    addOrUpdateMatch(pid, discoveredPeers[pid]);
+                    openChat(pid);
                 });
-            }
-
-            const discoveredPeers = {};
-            function renderDiscover(pub, profile) {
-                if (pub) discoveredPeers[pub] = profile;
-                const container = $('#discover-list');
-                const ids = Object.keys(discoveredPeers);
-                if (ids.length === 0) {
-                    container.innerHTML = '<div class="empty-state" role="status" aria-live="polite">🔍 Aucun profil découvert.<br>Active la découverte ou entre un ID manuellement.</div>';
-                    return;
-                }
-                container.innerHTML = ids.map(id => {
-                    const m = discoveredPeers[id];
-                    return `
-                    <div class="card">
-                        <div class="card-avatar">${m.avatar}</div>
-                        <div class="card-info">
-                            <h3>${m.name}</h3>
-                            <p>${m.bio || 'Pas de bio'}</p>
-                        </div>
-                        <button class="btn btn-primary" style="padding:8px 16px;" data-peer="${id}" aria-label="Ouvrir la discussion avec ${m.name}">💬</button>
-                    </div>`;
-                }).join('');
-                container.querySelectorAll('.btn-primary').forEach(btn => {
-                    btn.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        addOrUpdateMatch(btn.dataset.peer, discoveredPeers[btn.dataset.peer]);
-                        openChat(btn.dataset.peer);
-                    });
-                });
-            }
-
-            // ========== CHAT ==========
-
-            function openChat(peerId) {
-                STATE.currentChatPeer = peerId;
-                const m = STATE.matches[peerId];
-                if (!m) return;
-                $('#chat-peer-name').textContent = m.name || 'Anonyme';
-                const chatMsgs = $('#chat-messages');
-                const msgs = loadMessages(peerId);
-
-                // Efficient initial render
-                chatMsgs.innerHTML = msgs.map(msg => renderMessageHTML(msg)).join('');
-
-                document.getElementById('chat-overlay').classList.add('active');
-                chatMsgs.scrollTop = chatMsgs.scrollHeight;
-                if (m.unread) {
-                    m.unread = 0;
-                    saveMatches();
-                }
-
-                // Delta Sync: Request missing messages
-                if (STATE.bugout) {
-                    STATE.bugout.send(peerId, { type: 'sync_req', lastIndex: msgs.length });
-                }
-            }
-
-            function renderMessageHTML(msg) {
-                const cls = msg.sent ? 'sent' : 'received';
-                return `<div class="message ${cls}">${escapeHtml(msg.text)}<time>${msg.time || ''}</time></div>`;
-            }
-
-
-            function closeChat() {
-                document.getElementById('chat-overlay').classList.remove('active');
-                STATE.currentChatPeer = null;
-                renderMatches();
-            }
-
-            $('#btn-close-chat').addEventListener('click', closeChat);
-            $('#btn-send').addEventListener('click', sendMessage);
-            $('#input-message').addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') sendMessage();
             });
+        }
 
-
-            function sendMessage() {
-                const text = $('#input-message').value.trim();
-                if (!text || !STATE.currentChatPeer) return;
-                const peerId = STATE.currentChatPeer;
-                const msgs = loadMessages(peerId);
-                const msg = {
-                    text,
-                    time: new Date().toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' }),
-                    sent: true,
-                    seq: msgs.length
-                };
-                msgs.push(msg);
-                saveMessages(peerId);
-
-                // Delta Rendering
-                const chatMsgs = $('#chat-messages');
-                chatMsgs.insertAdjacentHTML('beforeend', renderMessageHTML(msg));
-
-                $('#input-message').value = '';
-                chatMsgs.scrollTop = chatMsgs.scrollHeight;
-                if (STATE.bugout) {
-                    STATE.bugout.send(peerId, { type: 'message', text, seq: msg.seq });
-                }
+        // ========== MATCHS UI ==========
+        function renderMatches() {
+            const container = $('#matches-list');
+            const ids = Object.keys(STATE.matches).sort((a, b) =>
+                (STATE.matches[b].lastActivity || 0) - (STATE.matches[a].lastActivity || 0)
+            );
+            if (ids.length === 0) {
+                container.innerHTML = '<div class="empty-state" role="status" aria-live="polite">💔 Aucun match pour le moment.<br>Va dans "Découvrir" !</div>';
+                return;
             }
+            container.innerHTML = ids.map(id => {
+                const m = STATE.matches[id];
+                const msgs = loadMessages(id);
+                const lastMsg = msgs.length ? escapeHtml(msgs[msgs.length - 1].text) : '<em>Pas encore de messages</em>';
+                const badge = m.unread > 0 ? `<span class="badge">${m.unread}</span>` : '';
+                return `
+                <div class="card">
+                    <div class="card-avatar">${escapeHtml(m.avatar || '😊')}</div>
+                    <div class="card-info">
+                        <h3>${escapeHtml(m.name)}${badge}</h3>
+                        <p>${lastMsg}</p>
+                    </div>
+                    <button class="btn btn-primary" style="padding:8px 16px;" data-peer="${escapeHtml(id)}" aria-label="Ouvrir la discussion avec ${escapeHtml(m.name)}">💬</button>
+                </div>`;
+            }).join('');
+            container.querySelectorAll('[data-peer]').forEach(btn => {
+                btn.addEventListener('click', () => openChat(btn.dataset.peer));
+            });
+        }
 
-            function receiveMessage(peerId, data) {
-                if (!STATE.matches[peerId]) return;
-                const text = typeof data === 'string' ? data : data.text;
-                const seq = typeof data === 'object' ? data.seq : null;
+        // ========== MESSAGERIE GUN ==========
+        // Chaque pair a un nœud Gun dédié à ses messages entrants : 'inbox-<monId>-from-<peerId>'
+        // Le destinataire écoute 'inbox-<monId>-from-*'
+
+        function inboxNode(fromId, toId) {
+            // Nœud où `fromId` dépose ses messages pour `toId`
+            return 'inbox-' + toId + '-from-' + fromId;
+        }
+
+        function startMessageListener(peerId) {
+            if (STATE.msgListeners[peerId]) return; // déjà en écoute
+            STATE.msgListeners[peerId] = true;
+
+            const node = inboxNode(peerId, STATE.myPeerId);
+            STATE.gun.get(node).map().on((data, msgKey) => {
+                if (!data || !data.text || !data.from) return;
+                if (data.from !== peerId) return;
 
                 const msgs = loadMessages(peerId);
-
-                // Avoid duplicates if we already have this seq
-                if (seq !== null && msgs.some(m => m.seq === seq && !m.sent)) return;
+                // Déduplication par clé Gun (msgKey)
+                if (msgs.some(m => m.gunKey === msgKey)) return;
 
                 const msg = {
-                    text,
-                    time: new Date().toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' }),
+                    text: data.text,
+                    time: data.time || nowTime(),
                     sent: false,
-                    seq: seq !== null ? seq : msgs.length
+                    gunKey: msgKey
                 };
                 msgs.push(msg);
                 saveMessages(peerId);
 
-                if (STATE.gun) {
-                    const msgId = Math.random().toString(36).substring(2);
-                    STATE.gun.get('msgs-' + STATE.currentChatPeer).get(msgId).put({
-                        from: STATE.myPeerId,
-                        text: text,
-                        time: Date.now(),
-                        read: false
-                    });
-                }
-            }
-
-            function receiveMessage(peerId, text) {
-                // Si on reçoit un message de quelqu'un qui n'est pas encore un match, on l'ajoute
-                if (!STATE.matches[peerId]) {
-                    // On essaie de récupérer son profil via la découverte
-                    STATE.gun.get(STATE.discoveryNode).get(peerId).once(data => {
-                        let name = "Anonyme";
-                        let avatar = "😊";
-                        if (data && data.profile) {
-                            const p = JSON.parse(data.profile);
-                            name = p.name;
-                            avatar = p.avatar;
-                        }
-                        addOrUpdateMatch(peerId, {name, avatar, messages: []});
-                        processIncomingMessage(peerId, text);
-                    });
-                } else {
-                    processIncomingMessage(peerId, text);
-                }
-            }
-
-            function processIncomingMessage(peerId, text) {
-                const msg = { text, time: new Date().toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' }), sent: false };
-                STATE.matches[peerId].messages.push(msg);
-                STATE.matches[peerId].unread = (STATE.matches[peerId].unread || 0) + 1;
-                saveMatches();
                 if (STATE.currentChatPeer === peerId) {
+                    // Chat ouvert : afficher le message en direct
                     const chatMsgs = $('#chat-messages');
                     chatMsgs.insertAdjacentHTML('beforeend', renderMessageHTML(msg));
                     chatMsgs.scrollTop = chatMsgs.scrollHeight;
                 } else {
+                    // Chat fermé : incrémenter le badge non-lu
                     STATE.matches[peerId].unread = (STATE.matches[peerId].unread || 0) + 1;
+                    STATE.matches[peerId].lastActivity = Date.now();
                     saveMatches();
                     toast(`📩 Nouveau message de ${STATE.matches[peerId].name}`);
                 }
+            });
+        }
+
+        function sendGunMessage(peerId, text) {
+            // On écrit dans le nœud inbox du destinataire
+            const node = inboxNode(STATE.myPeerId, peerId);
+            const msgKey = Date.now().toString(36) + '-' + Math.random().toString(36).substr(2, 5);
+            STATE.gun.get(node).get(msgKey).put({
+                from: STATE.myPeerId,
+                text: text,
+                time: nowTime(),
+                ts: Date.now()
+            });
+        }
+
+        // ========== CHAT ==========
+        function openChat(peerId) {
+            const m = STATE.matches[peerId];
+            if (!m) return;
+
+            STATE.currentChatPeer = peerId;
+            $('#chat-peer-name').textContent = m.name || 'Anonyme';
+
+            const chatMsgs = $('#chat-messages');
+            const msgs = loadMessages(peerId);
+            chatMsgs.innerHTML = msgs.map(renderMessageHTML).join('');
+            $('#chat-overlay').classList.add('active');
+            chatMsgs.scrollTop = chatMsgs.scrollHeight;
+
+            // Réinitialiser les non-lus
+            if (m.unread) {
+                m.unread = 0;
+                saveMatches();
             }
 
+            // Démarrer l'écoute Gun si pas encore fait
+            startMessageListener(peerId);
+        }
 
-            function escapeHtml(text) {
-                return String(text).replace(/[&<>"']/g, function(m) {
-                    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m];
-                });
-            }
+        function renderMessageHTML(msg) {
+            const cls = msg.sent ? 'sent' : 'received';
+            return `<div class="message ${cls}">${escapeHtml(msg.text)}<time>${escapeHtml(msg.time || '')}</time></div>`;
+        }
 
-            // ========== ID COPIE/PARTAGE ==========
-            $('#btn-copy-id').addEventListener('click', () => {
-                if (!STATE.myPeerId) return;
-                navigator.clipboard.writeText(STATE.myPeerId)
-                    .then(() => toast('📋 ID copié'))
-                    .catch(() => toast('❌ Erreur'));
-            });
-            $('#btn-share-id').addEventListener('click', () => {
-                if (!STATE.myPeerId) return;
-                if (navigator.share) {
-                    navigator.share({ title: 'Mon ID Tinder P2P', text: STATE.myPeerId }).catch(() => {});
-                } else {
-                    navigator.clipboard.writeText(STATE.myPeerId)
-                        .then(() => toast('📋 ID copié (partage non supporté)'))
-                        .catch(() => toast('❌ Erreur'));
-                }
-            });
-
-            // ========== NAVIGATION ==========
-            $$('nav button').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const screen = btn.dataset.screen;
-                    $$('nav button').forEach(b => b.classList.remove('active'));
-                    btn.classList.add('active');
-                    $$('.screen').forEach(s => s.classList.remove('active'));
-                    $(`#screen-${screen}`).classList.add('active');
-                    if (screen === 'matches') renderMatches();
-                    if (screen === 'discover') renderDiscover();
-                });
-            });
-
-            // ========== DÉMARRAGE ==========
-            loadProfileUI();
-            initGun().catch(e => {
-                console.error(e);
-                $('#display-peer-id').textContent = '❌ Erreur réseau';
-                $('#network-status').textContent = '🔴 Échec';
-            });
+        function closeChat() {
+            $('#chat-overlay').classList.remove('active');
+            STATE.currentChatPeer = null;
             renderMatches();
-        })();
+        }
+
+        function sendMessage() {
+            const text = $('#input-message').value.trim();
+            if (!text || !STATE.currentChatPeer) return;
+            const peerId = STATE.currentChatPeer;
+
+            const msg = {
+                text,
+                time: nowTime(),
+                sent: true,
+                gunKey: null
+            };
+            const msgs = loadMessages(peerId);
+            msgs.push(msg);
+            saveMessages(peerId);
+
+            const chatMsgs = $('#chat-messages');
+            chatMsgs.insertAdjacentHTML('beforeend', renderMessageHTML(msg));
+            $('#input-message').value = '';
+            chatMsgs.scrollTop = chatMsgs.scrollHeight;
+
+            // Mise à jour du dernier message dans les matchs
+            STATE.matches[peerId].lastActivity = Date.now();
+            saveMatches();
+
+            // Envoi via Gun
+            sendGunMessage(peerId, text);
+        }
+
+        $('#btn-close-chat').addEventListener('click', closeChat);
+        $('#btn-send').addEventListener('click', sendMessage);
+        $('#input-message').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        // ========== ID COPIE/PARTAGE ==========
+        $('#btn-copy-id').addEventListener('click', () => {
+            if (!STATE.myPeerId) return toast('⚠️ ID pas encore prêt');
+            navigator.clipboard.writeText(STATE.myPeerId)
+                .then(() => toast('📋 ID copié !'))
+                .catch(() => {
+                    // Fallback pour les navigateurs sans clipboard API
+                    const el = document.createElement('textarea');
+                    el.value = STATE.myPeerId;
+                    document.body.appendChild(el);
+                    el.select();
+                    document.execCommand('copy');
+                    el.remove();
+                    toast('📋 ID copié !');
+                });
+        });
+
+        $('#btn-share-id').addEventListener('click', () => {
+            if (!STATE.myPeerId) return toast('⚠️ ID pas encore prêt');
+            const shareData = { title: 'Mon ID Tinder P2P', text: STATE.myPeerId };
+            if (navigator.share) {
+                navigator.share(shareData).catch(() => {});
+            } else {
+                navigator.clipboard.writeText(STATE.myPeerId)
+                    .then(() => toast('📋 ID copié (partage non supporté)'))
+                    .catch(() => toast('❌ Erreur de copie'));
+            }
+        });
+
+        // ========== RÉGÉNÉRER L'ID ==========
+        $('#btn-regenerate-id').addEventListener('click', async () => {
+            if (!confirm('Cela va supprimer ton identité actuelle et tes contacts. Continuer ?')) return;
+
+            // Retirer l'annonce du réseau si visible
+            if (STATE.isDiscoverable && STATE.myPeerId) {
+                STATE.gun.get(STATE.discoveryNode).get(STATE.myPeerId).put(null);
+            }
+
+            localStorage.removeItem('p2p_keypair');
+            localStorage.removeItem('p2p_matches');
+            // Supprimer tous les messages sauvegardés
+            Object.keys(localStorage).filter(k => k.startsWith('p2p_msgs_')).forEach(k => localStorage.removeItem(k));
+
+            toast('🔄 Régénération en cours...');
+            location.reload();
+        });
+
+        // ========== NAVIGATION ==========
+        $$('nav button').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const screen = btn.dataset.screen;
+                $$('nav button').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                $$('.screen').forEach(s => s.classList.remove('active'));
+                $(`#screen-${screen}`).classList.add('active');
+                if (screen === 'matches') renderMatches();
+                if (screen === 'discover') renderDiscover();
+            });
+        });
+
+        // ========== DÉMARRAGE ==========
+        loadProfileUI();
+        initGun()
+            .then(() => {
+                // Démarrer l'écoute pour tous les matchs existants
+                Object.keys(STATE.matches).forEach(startMessageListener);
+                renderMatches();
+            })
+            .catch(e => {
+                console.error('Erreur Gun:', e);
+                $('#display-peer-id').textContent = '❌ Erreur réseau';
+                $('#network-status').textContent = '🔴 Réseau P2P inaccessible';
+            });
+
+    })();
     </script>
 </body>
 </html>
