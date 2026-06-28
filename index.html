@@ -1,957 +1,603 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
-    <meta name="theme-color" content="#FF4458">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Tinder P2P">
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔥</text></svg>">
-    <title>🔥 Tinder P2P</title>
-    <style>
-        :root {
-            --primary: #FF4458;
-            --primary-dark: #E53945;
-            --secondary: #FF6B6B;
-            --success: #00D46A;
-            --warning: #FFD700;
-            --bg: #F8F9FA;
-            --surface: #FFFFFF;
-            --text: #2D3436;
-            --text-secondary: #636E72;
-            --border: #E9ECEF;
-            --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
-            --shadow-md: 0 4px 12px rgba(0,0,0,0.1);
-            --shadow-lg: 0 8px 24px rgba(0,0,0,0.12);
-            --radius-sm: 8px;
-            --radius-md: 16px;
-            --radius-lg: 24px;
-            --radius-xl: 32px;
-            --safe-bottom: env(safe-area-inset-bottom, 0px);
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>P2P — WebRTC sans serveur</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-        @media (prefers-color-scheme: dark) {
-            :root {
-                --bg: #121212;
-                --surface: #1E1E1E;
-                --text: #FFFFFF;
-                --text-secondary: #B0B0B0;
-                --border: #2C2C2E;
-                --shadow-sm: 0 1px 3px rgba(0,0,0,0.4);
-                --shadow-md: 0 4px 12px rgba(0,0,0,0.5);
-                --shadow-lg: 0 8px 24px rgba(0,0,0,0.6);
-            }
-        }
+  :root {
+    --bg: #f8f7f4;
+    --surface: #ffffff;
+    --surface-2: #f1efe8;
+    --border: rgba(0,0,0,0.10);
+    --border-strong: rgba(0,0,0,0.18);
+    --text: #1a1a18;
+    --text-muted: #5f5e5a;
+    --accent: #185FA5;
+    --accent-bg: #E6F1FB;
+    --accent-border: #B5D4F4;
+    --success: #0F6E56;
+    --success-bg: #E1F5EE;
+    --success-border: #9FE1CB;
+    --warn: #854F0B;
+    --warn-bg: #FAEEDA;
+    --radius: 10px;
+  }
 
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: var(--bg);
-            color: var(--text);
-            height: 100dvh;
-            overflow: hidden;
-            user-select: none;
-            -webkit-tap-highlight-color: transparent;
-            line-height: 1.5;
-        }
-        #app {
-            display: flex;
-            flex-direction: column;
-            height: 100dvh;
-            max-width: 480px;
-            margin: 0 auto;
-            background: var(--bg);
-            box-shadow: var(--shadow-lg);
-            position: relative;
-        }
-        nav {
-            display: flex;
-            background: var(--surface);
-            border-top: 1px solid var(--border);
-            padding: 8px 12px calc(8px + var(--safe-bottom));
-            position: fixed;
-            bottom: 0;
-            width: 100%;
-            max-width: 480px;
-            z-index: 100;
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            background: rgba(255,255,255, 0.9);
-        }
-        @media (prefers-color-scheme: dark) {
-            nav { background: rgba(30,30,30,0.9); }
-        }
-        nav button {
-            flex: 1;
-            background: none;
-            border: none;
-            padding: 8px 4px;
-            font-size: 22px;
-            cursor: pointer;
-            border-radius: var(--radius-md);
-            color: var(--text-secondary);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 4px;
-            transition: all 0.2s ease;
-        }
-        nav button.active {
-            color: var(--primary);
-            background: rgba(255, 68, 88, 0.15);
-        }
-        .screen {
-            display: none;
-            flex: 1;
-            overflow-y: auto;
-            padding: 20px 16px 90px;
-            flex-direction: column;
-        }
-        .screen.active { display: flex; }
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: var(--surface);
-            padding: 16px 20px;
-            border-radius: var(--radius-lg);
-            margin-bottom: 20px;
-            box-shadow: var(--shadow-sm);
-            border: 1px solid var(--border);
-        }
-        .header h2 { font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
-        .btn {
-            padding: 10px 20px;
-            border: none;
-            border-radius: var(--radius-xl);
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            color: #fff;
-            transition: all 0.2s;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        .btn:active { transform: scale(0.96); }
-        .btn-primary { background: linear-gradient(135deg, #FF4458, #FF6B6B); }
-        .btn-success { background: linear-gradient(135deg, #00D46A, #00B359); }
-        .btn-ghost {
-            background: transparent;
-            color: var(--primary);
-            border: 2px solid var(--primary);
-        }
-        .input-group { margin-bottom: 16px; }
-        .input-field {
-            width: 100%;
-            padding: 14px 16px;
-            border: 2px solid var(--border);
-            border-radius: var(--radius-md);
-            font-size: 15px;
-            background: var(--surface);
-            color: var(--text);
-            font-family: inherit;
-            transition: all 0.2s;
-        }
-        .input-field:focus {
-            outline: none;
-            border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(255,68,88,0.2);
-        }
-        .profile-img-container {
-            position: relative;
-            width: 140px;
-            height: 140px;
-            margin: 20px auto;
-        }
-        .profile-img {
-            width: 100%;
-            height: 100%;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 56px;
-            border: 4px solid var(--surface);
-            box-shadow: var(--shadow-md);
-        }
-        .profile-img-overlay {
-            position: absolute;
-            bottom: 0;
-            right: 0;
-            background: var(--primary);
-            color: white;
-            width: 42px;
-            height: 42px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            box-shadow: var(--shadow-md);
-            font-size: 18px;
-            border: none;
-            font-family: inherit;
-        }
-        .card {
-            background: var(--surface);
-            border-radius: var(--radius-lg);
-            padding: 16px;
-            margin-bottom: 12px;
-            box-shadow: var(--shadow-sm);
-            border: 1px solid var(--border);
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-        .card-avatar {
-            width: 52px;
-            height: 52px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 24px;
-            flex-shrink: 0;
-        }
-        .card-info { flex: 1; min-width: 0; }
-        .card-info h3 { font-size: 16px; font-weight: 600; }
-        .card-info p {
-            font-size: 13px;
-            color: var(--text-secondary);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        .id-box {
-            background: var(--surface);
-            padding: 20px;
-            border-radius: var(--radius-lg);
-            margin-top: 20px;
-            border: 1px solid var(--border);
-            text-align: center;
-        }
-        .id-value {
-            font-family: 'SF Mono', 'Cascadia Code', monospace;
-            font-size: 13px;
-            word-break: break-all;
-            background: var(--bg);
-            padding: 12px;
-            border-radius: var(--radius-md);
-            margin: 12px 0;
-            border: 1px solid var(--border);
-            user-select: all;
-        }
-        .chat-overlay {
-            position: fixed;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            background: var(--bg);
-            z-index: 200;
-            display: none;
-            flex-direction: column;
-            max-width: 480px;
-            margin: 0 auto;
-            right: 0;
-        }
-        .chat-overlay.active { display: flex; }
-        .chat-header {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 16px;
-            background: var(--surface);
-            border-bottom: 1px solid var(--border);
-        }
-        .chat-messages {
-            flex: 1;
-            overflow-y: auto;
-            padding: 16px;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-        .message {
-            max-width: 75%;
-            padding: 10px 14px;
-            border-radius: 18px;
-            font-size: 15px;
-            animation: slideUp 0.3s ease;
-        }
-        .message.sent {
-            align-self: flex-end;
-            background: linear-gradient(135deg, #FF4458, #FF6B6B);
-            color: #fff;
-            border-bottom-right-radius: 4px;
-        }
-        .message.received {
-            align-self: flex-start;
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-bottom-left-radius: 4px;
-        }
-        .message time { font-size: 11px; opacity: 0.7; display: block; margin-top: 4px; }
-        .chat-input-bar {
-            display: flex;
-            gap: 8px;
-            padding: 12px 16px calc(12px + var(--safe-bottom));
-            background: var(--surface);
-            border-top: 1px solid var(--border);
-        }
-        .chat-input-bar input {
-            flex: 1;
-            padding: 12px 16px;
-            border: 2px solid var(--border);
-            border-radius: var(--radius-xl);
-            font-size: 15px;
-            background: var(--bg);
-            color: var(--text);
-            font-family: inherit;
-        }
-        .chat-input-bar input:focus {
-            outline: none;
-            border-color: var(--primary);
-        }
-        .badge {
-            background: var(--primary);
-            color: white;
-            font-size: 11px;
-            font-weight: 700;
-            border-radius: 50px;
-            padding: 2px 7px;
-            margin-left: 6px;
-        }
-        .toast {
-            position: fixed;
-            top: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0,0,0,0.85);
-            color: white;
-            padding: 12px 24px;
-            border-radius: 50px;
-            font-size: 14px;
-            z-index: 999;
-            animation: toastIn 0.3s ease;
-            backdrop-filter: blur(12px);
-            pointer-events: none;
-        }
-        @keyframes toastIn {
-            from { opacity: 0; transform: translate(-50%, -20px); }
-            to { opacity: 1; transform: translate(-50%, 0); }
-        }
-        @keyframes slideUp {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        .empty-state {
-            text-align: center;
-            color: var(--text-secondary);
-            padding: 60px 20px;
-        }
-    </style>
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1c1a;
+      --surface: #252523;
+      --surface-2: #2e2e2b;
+      --border: rgba(255,255,255,0.10);
+      --border-strong: rgba(255,255,255,0.18);
+      --text: #e8e6df;
+      --text-muted: #9b9991;
+      --accent: #5ca0e8;
+      --accent-bg: #0c2a47;
+      --accent-border: #1a4a7a;
+      --success: #2ab88a;
+      --success-bg: #04221a;
+      --success-border: #0a4030;
+      --warn: #e8a830;
+      --warn-bg: #2a1a04;
+    }
+  }
+
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 1rem;
+  }
+
+  .app {
+    max-width: 640px;
+    margin: 0 auto;
+  }
+
+  header {
+    text-align: center;
+    padding: 1.5rem 0 1rem;
+  }
+  header h1 { font-size: 1.3rem; font-weight: 600; }
+  header p { font-size: 0.85rem; color: var(--text-muted); margin-top: 0.3rem; }
+
+  .status-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 1rem;
+    border-radius: var(--radius);
+    border: 0.5px solid var(--border);
+    background: var(--surface);
+    margin-bottom: 1rem;
+    font-size: 0.85rem;
+  }
+  .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #ccc; flex-shrink: 0;
+    transition: background 0.4s;
+  }
+  .dot.connected { background: var(--success); }
+  .dot.connecting { background: var(--warn); animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  .card {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    margin-bottom: 0.75rem;
+  }
+  .card h2 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .step-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    background: var(--accent-bg);
+    color: var(--accent);
+    font-size: 0.7rem;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .info-box {
+    background: var(--surface-2);
+    border-radius: 6px;
+    padding: 0.6rem 0.8rem;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-bottom: 0.75rem;
+  }
+
+  textarea {
+    width: 100%;
+    min-height: 100px;
+    border: 0.5px solid var(--border-strong);
+    border-radius: 6px;
+    background: var(--surface-2);
+    color: var(--text);
+    font-family: monospace;
+    font-size: 0.78rem;
+    padding: 0.6rem;
+    resize: vertical;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  textarea:focus { border-color: var(--accent); }
+
+  .btn-row { display: flex; gap: 0.5rem; margin-top: 0.6rem; flex-wrap: wrap; }
+
+  button {
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    border: 0.5px solid var(--border-strong);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+  }
+  button:hover { background: var(--surface-2); }
+  button:active { transform: scale(0.97); }
+  button.primary {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+  button.primary:hover { opacity: 0.88; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .copy-btn {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.78rem;
+  }
+
+  /* Chat */
+  .chat-section { display: none; }
+  .chat-section.visible { display: block; }
+
+  .messages {
+    height: 260px;
+    overflow-y: auto;
+    border: 0.5px solid var(--border);
+    border-radius: 8px;
+    padding: 0.75rem;
+    margin-bottom: 0.6rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    background: var(--surface-2);
+  }
+
+  .msg {
+    max-width: 78%;
+    padding: 0.45rem 0.75rem;
+    border-radius: 10px;
+    font-size: 0.88rem;
+    line-height: 1.4;
+    word-break: break-word;
+  }
+  .msg.out {
+    align-self: flex-end;
+    background: var(--accent);
+    color: #fff;
+    border-bottom-right-radius: 3px;
+  }
+  .msg.in {
+    align-self: flex-start;
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    color: var(--text);
+    border-bottom-left-radius: 3px;
+  }
+  .msg.system {
+    align-self: center;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    background: none;
+  }
+
+  .msg-input-row {
+    display: flex;
+    gap: 0.5rem;
+  }
+  .msg-input-row input {
+    flex: 1;
+    padding: 0.55rem 0.75rem;
+    border: 0.5px solid var(--border-strong);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text);
+    font-size: 0.9rem;
+    outline: none;
+  }
+  .msg-input-row input:focus { border-color: var(--accent); }
+
+  /* Profils Tinder-like */
+  .profiles-section { display: none; }
+  .profiles-section.visible { display: block; }
+
+  .profile-card {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 0.75rem;
+  }
+  .profile-avatar {
+    height: 160px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 5rem;
+    background: var(--accent-bg);
+  }
+  .profile-info { padding: 1rem; }
+  .profile-info h3 { font-size: 1.1rem; font-weight: 600; }
+  .profile-info p { font-size: 0.85rem; color: var(--text-muted); margin-top: 0.2rem; }
+
+  .swipe-btns {
+    display: flex;
+    justify-content: center;
+    gap: 1.5rem;
+    padding: 0.5rem 0 0.75rem;
+  }
+  .swipe-btn {
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    font-size: 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid var(--border-strong);
+  }
+  .swipe-btn.nope { border-color: #e24b4a; color: #e24b4a; }
+  .swipe-btn.like { border-color: var(--success); color: var(--success); }
+
+  .hidden { display: none !important; }
+
+  .tag {
+    display: inline-block;
+    font-size: 0.72rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 99px;
+    background: var(--accent-bg);
+    color: var(--accent);
+    border: 0.5px solid var(--accent-border);
+    margin-right: 0.3rem;
+  }
+  .tag.success { background: var(--success-bg); color: var(--success); border-color: var(--success-border); }
+</style>
 </head>
 <body>
-    <div id="app">
-        <!-- Profil -->
-        <section id="screen-profile" class="screen active">
-            <div class="header">
-                <h2>👤 Mon Profil</h2>
-                <span style="color:var(--success);font-weight:600;" id="profile-status">🟢 En ligne</span>
-            </div>
-            <div class="profile-img-container">
-                <div class="profile-img" id="profile-avatar">😊</div>
-                <button class="profile-img-overlay" id="btn-change-avatar" aria-label="Changer l'avatar">📷</button>
-            </div>
-            <div class="input-group">
-                <label for="input-name" style="display:block; font-size:12px; margin-bottom:4px; color:var(--text-secondary); font-weight:600; text-align:left; padding-left:4px;">PRÉNOM</label>
-                <input class="input-field" id="input-name" placeholder="Ton prénom" maxlength="30">
-            </div>
-            <div class="input-group">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; padding:0 4px;">
-                    <label for="input-bio" style="font-size:12px; color:var(--text-secondary); font-weight:600;">BIO</label>
-                    <span id="bio-counter" style="font-size:11px; color:var(--text-secondary);">0/150</span>
-                </div>
-                <textarea class="input-field" id="input-bio" placeholder="Ta bio..." rows="2" maxlength="150"></textarea>
-            </div>
-            <button class="btn btn-primary" id="btn-save-profile" style="width:100%;" aria-label="Sauvegarder le profil">💾 Sauvegarder</button>
-            <div class="id-box">
-                <strong>🔑 Ton ID unique</strong>
-                <div class="id-value" id="display-peer-id">⏳ Initialisation...</div>
-                <div style="display:flex; gap:8px; justify-content:center; margin-top:12px; flex-wrap:wrap;">
-                    <button class="btn btn-ghost" id="btn-copy-id" aria-label="Copier l'ID">📋 Copier</button>
-                    <button class="btn btn-ghost" id="btn-share-id" aria-label="Partager l'ID">📤 Partager</button>
-                    <button class="btn btn-ghost" id="btn-regenerate-id" aria-label="Régénérer l'ID">🔄 Régénérer</button>
-                </div>
-                <p style="margin-top:8px; font-size:12px; color:var(--text-secondary);" id="network-status"></p>
-            </div>
-        </section>
+<div class="app">
+  <header>
+    <h1>💫 P2P — WebRTC sans serveur</h1>
+    <p>Connexion directe par copier-coller SDP · Zéro tiers · DTLS chiffré</p>
+  </header>
 
-        <!-- Découvrir -->
-        <section id="screen-discover" class="screen">
-            <div class="header">
-                <h2>🔍 Découvrir</h2>
-                <button class="btn" id="btn-toggle-discover">OFF</button>
-            </div>
-            <div class="input-group">
-                <label for="input-peer-id" style="display:block; font-size:12px; margin-bottom:4px; color:var(--text-secondary); font-weight:600; text-align:left; padding-left:4px;">REJOINDRE UN AMI</label>
-                <input class="input-field" id="input-peer-id" placeholder="Colle l'ID d'un profil ici...">
-            </div>
-            <button class="btn btn-primary" id="btn-connect" style="width:100%; margin-bottom:20px;">🔗 Se connecter</button>
-            <div id="discover-list"></div>
-        </section>
+  <!-- Status -->
+  <div class="status-bar">
+    <div class="dot" id="dot"></div>
+    <span id="status-text">Non connecté</span>
+    <span class="tag" id="role-badge" style="margin-left:auto"></span>
+  </div>
 
-        <!-- Matchs -->
-        <section id="screen-matches" class="screen">
-            <div class="header">
-                <h2>💝 Mes Matchs</h2>
-            </div>
-            <div id="matches-list"></div>
-        </section>
-
-        <!-- Chat overlay -->
-        <div id="chat-overlay" class="chat-overlay">
-            <div class="chat-header">
-                <button class="btn btn-ghost" id="btn-close-chat" style="padding:8px 12px;" aria-label="Retour aux matchs">← Retour</button>
-                <h3 id="chat-peer-name">Chat</h3>
-            </div>
-            <div class="chat-messages" id="chat-messages"></div>
-            <div class="chat-input-bar">
-                <input type="text" id="input-message" placeholder="Écris un message..." maxlength="500" aria-label="Message à envoyer">
-                <button class="btn btn-primary" id="btn-send" style="padding:12px 16px;" aria-label="Envoyer le message">➤</button>
-            </div>
-        </div>
-
-        <!-- Navigation -->
-        <nav>
-            <button class="active" data-screen="profile" aria-label="Profil">👤<small>Profil</small></button>
-            <button data-screen="discover" aria-label="Découvrir">🔍<small>Découvrir</small></button>
-            <button data-screen="matches" aria-label="Matchs">💝<small>Matchs</small></button>
-        </nav>
+  <!-- STEP 1 : Choisir rôle -->
+  <div class="card" id="step-role">
+    <h2><span class="step-badge">1</span> Qui es-tu dans cet échange ?</h2>
+    <div class="info-box">
+      L'initiateur crée l'Offer. Le récepteur reçoit l'Offer et crée l'Answer. Un seul échange de 2 blocs de texte suffit.
     </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/gun/sea.js"></script>
-    <script>
-    (function() {
-        'use strict';
-
-        // ========== ÉTAT CENTRALISÉ ==========
-        const STATE = {
-            myPeerId: null,
-            profile: JSON.parse(localStorage.getItem('p2p_profile') || '{"name":"","bio":"","avatar":"😊"}'),
-            isDiscoverable: false,
-            matches: JSON.parse(localStorage.getItem('p2p_matches') || '{}'),
-            messages: {},         // cache en mémoire : { peerId: [msg, ...] }
-            currentChatPeer: null,
-            gun: null,
-            discoveryNode: 'tinder-p2p-discovery-v3',
-            msgListeners: {}      // pour éviter les listeners Gun dupliqués
-        };
-
-        // ========== UTILITAIRES ==========
-        const $ = (s) => document.querySelector(s);
-        const $$ = (s) => document.querySelectorAll(s);
-
-        let _toastTimer = null;
-        function toast(msg) {
-            const existing = document.querySelector('.toast');
-            if (existing) existing.remove();
-            const t = document.createElement('div');
-            t.className = 'toast';
-            t.setAttribute('role', 'alert');
-            t.setAttribute('aria-live', 'assertive');
-            t.textContent = msg;
-            document.body.appendChild(t);
-            clearTimeout(_toastTimer);
-            _toastTimer = setTimeout(() => t.remove(), 3000);
-        }
-
-        function escapeHtml(text) {
-            return String(text).replace(/[&<>"']/g, function(m) {
-                return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[m];
-            });
-        }
-
-        function nowTime() {
-            return new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-        }
-
-        // ========== STOCKAGE MESSAGES ==========
-        function loadMessages(peerId) {
-            if (!STATE.messages[peerId]) {
-                STATE.messages[peerId] = JSON.parse(
-                    localStorage.getItem('p2p_msgs_' + peerId) || '[]'
-                );
-            }
-            return STATE.messages[peerId];
-        }
-
-        function saveMessages(peerId) {
-            if (STATE.messages[peerId]) {
-                localStorage.setItem('p2p_msgs_' + peerId, JSON.stringify(STATE.messages[peerId]));
-            }
-        }
-
-        function saveMatches() {
-            localStorage.setItem('p2p_matches', JSON.stringify(STATE.matches));
-        }
-
-        // ========== PROFIL UI ==========
-        function loadProfileUI() {
-            $('#input-name').value = STATE.profile.name;
-            $('#input-bio').value = STATE.profile.bio;
-            $('#profile-avatar').textContent = STATE.profile.avatar;
-            updateBioCounter();
-        }
-
-        const inputBio = $('#input-bio');
-        const bioCounter = $('#bio-counter');
-
-        function updateBioCounter() {
-            const len = inputBio.value.length;
-            bioCounter.textContent = `${len}/150`;
-            bioCounter.style.color = len >= 140 ? 'var(--primary)' : 'var(--text-secondary)';
-        }
-
-        inputBio.addEventListener('input', updateBioCounter);
-
-        $('#btn-save-profile').addEventListener('click', () => {
-            const name = $('#input-name').value.trim();
-            if (!name) return toast('⚠️ Entre un prénom');
-            STATE.profile.name = name;
-            STATE.profile.bio = $('#input-bio').value.trim();
-            localStorage.setItem('p2p_profile', JSON.stringify(STATE.profile));
-            // Si on est visible, on met à jour notre annonce
-            if (STATE.isDiscoverable && STATE.myPeerId) {
-                announcePresence();
-            }
-            toast('✅ Profil sauvegardé');
-        });
-
-        const avatars = ['😊','😎','🥳','🤩','😇','🦊','🐱','🐶','🦄','🐼','🌸','🔥','💎','🍕','🎸','⚽'];
-        $('#btn-change-avatar').addEventListener('click', () => {
-            const idx = avatars.indexOf(STATE.profile.avatar);
-            STATE.profile.avatar = avatars[(idx + 1) % avatars.length];
-            $('#profile-avatar').textContent = STATE.profile.avatar;
-        });
-
-        $('#btn-change-avatar').addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('#btn-change-avatar').click(); }
-        });
-
-        // ========== INITIALISATION GUN ==========
-        async function initGun() {
-            $('#network-status').textContent = '🔵 Connexion au réseau P2P...';
-            $('#display-peer-id').textContent = '⏳ Initialisation...';
-
-            STATE.gun = Gun([
-                'https://gun-manhattan.herokuapp.com/gun',
-                'https://gun-us.herokuapp.com/gun',
-                'wss://gun-manhattan.herokuapp.com/gun'
-            ]);
-
-            // Génération ou récupération de la paire de clés (identité persistante)
-            let pair = null;
-            const stored = localStorage.getItem('p2p_keypair');
-            if (stored) {
-                try { pair = JSON.parse(stored); } catch(e) { pair = null; }
-            }
-            if (!pair || !pair.pub) {
-                pair = await SEA.pair();
-                localStorage.setItem('p2p_keypair', JSON.stringify(pair));
-            }
-
-            STATE.myPeerId = pair.pub;
-            $('#display-peer-id').textContent = STATE.myPeerId.substring(0, 20) + '...';
-            $('#network-status').textContent = '🟢 Connecté au réseau P2P';
-
-            setupDiscoveryListener();
-        }
-
-        // ========== DÉCOUVERTE ==========
-        function announcePresence() {
-            STATE.gun.get(STATE.discoveryNode).get(STATE.myPeerId).put({
-                profile: JSON.stringify({
-                    name: STATE.profile.name,
-                    bio: STATE.profile.bio,
-                    avatar: STATE.profile.avatar
-                }),
-                timestamp: Date.now()
-            });
-        }
-
-        function setupDiscoveryListener() {
-            STATE.gun.get(STATE.discoveryNode).map().on((data, pub) => {
-                if (!data || pub === STATE.myPeerId) return;
-                if (!data.profile) return;
-                // Ignorer les annonces trop vieilles (> 1h)
-                if (data.timestamp && Date.now() - data.timestamp > 3600000) return;
-                try {
-                    const profile = JSON.parse(data.profile);
-                    if (!profile.name) return;
-                    addToDiscovered(pub, profile);
-                } catch(e) { /* profil malformé, on ignore */ }
-            });
-        }
-
-        $('#btn-toggle-discover').addEventListener('click', () => {
-            if (!STATE.myPeerId) return toast('⚠️ En cours d\'initialisation...');
-            if (!STATE.profile.name) return toast('⚠️ Sauvegarde ton profil d\'abord');
-
-            STATE.isDiscoverable = !STATE.isDiscoverable;
-            const btn = $('#btn-toggle-discover');
-            btn.textContent = STATE.isDiscoverable ? 'ON' : 'OFF';
-            btn.className = `btn ${STATE.isDiscoverable ? 'btn-success' : ''}`;
-
-            if (STATE.isDiscoverable) {
-                announcePresence();
-                toast('📡 Tu es visible !');
-            } else {
-                // On retire notre annonce
-                STATE.gun.get(STATE.discoveryNode).get(STATE.myPeerId).put(null);
-                toast('🔒 Tu es invisible.');
-            }
-        });
-
-        // ========== CONNEXION MANUELLE ==========
-        $('#btn-connect').addEventListener('click', () => {
-            const peerId = $('#input-peer-id').value.trim();
-            if (!peerId) return toast('⚠️ Entre un ID');
-            if (peerId === STATE.myPeerId) return toast('⚠️ C\'est ton propre ID');
-
-            toast('🔍 Recherche du profil...');
-            const btn = $('#btn-connect');
-            btn.disabled = true;
-
-            // .once() lit uniquement le cache local Gun et peut retourner null
-            // si la donnée n'est pas encore synchronisée depuis les pairs distants.
-            // On utilise .on() avec un timeout de 8s pour attendre la propagation réseau.
-            let found = false;
-            const node = STATE.gun.get(STATE.discoveryNode).get(peerId);
-
-            const handler = node.on((data) => {
-                if (!data || !data.profile) return; // null ou pas encore arrivé
-                if (found) return;
-                found = true;
-                handler.off(); // stopper l'écoute
-                clearTimeout(timer);
-                btn.disabled = false;
-
-                try {
-                    const profile = JSON.parse(data.profile);
-                    addOrUpdateMatch(peerId, profile);
-                    $('#input-peer-id').value = '';
-                    toast('✅ Ami ajouté !');
-                    openChat(peerId);
-                } catch(e) {
-                    toast('❌ Profil reçu mais invalide');
-                }
-            });
-
-            const timer = setTimeout(() => {
-                if (found) return;
-                handler.off();
-                btn.disabled = false;
-                toast('❌ Profil introuvable — vérifie que l\'ID est correct et que l\'utilisateur est visible');
-            }, 8000);
-        });
-
-        // ========== MATCHS ==========
-        function addOrUpdateMatch(peerId, profile) {
-            if (!STATE.matches[peerId]) {
-                STATE.matches[peerId] = {
-                    name: profile.name || 'Anonyme',
-                    bio: profile.bio || '',
-                    avatar: profile.avatar || '😊',
-                    unread: 0,
-                    lastActivity: Date.now()
-                };
-            } else {
-                STATE.matches[peerId].name    = profile.name    || STATE.matches[peerId].name;
-                STATE.matches[peerId].bio     = profile.bio     || STATE.matches[peerId].bio;
-                STATE.matches[peerId].avatar  = profile.avatar  || STATE.matches[peerId].avatar;
-                STATE.matches[peerId].lastActivity = Date.now();
-            }
-            saveMatches();
-            renderMatches();
-            // Démarrer l'écoute des messages Gun pour ce pair
-            startMessageListener(peerId);
-        }
-
-        // ========== DÉCOUVRIR UI ==========
-        const discoveredPeers = {};
-
-        function addToDiscovered(pub, profile) {
-            discoveredPeers[pub] = profile;
-            // Si l'écran découverte est actif, rafraîchir
-            if ($('#screen-discover').classList.contains('active')) {
-                renderDiscover();
-            }
-        }
-
-        function renderDiscover() {
-            const container = $('#discover-list');
-            const ids = Object.keys(discoveredPeers).filter(id => !STATE.matches[id]);
-            if (ids.length === 0) {
-                container.innerHTML = '<div class="empty-state" role="status" aria-live="polite">🔍 Aucun profil découvert.<br>Active la découverte ou entre un ID manuellement.</div>';
-                return;
-            }
-            container.innerHTML = ids.map(id => {
-                const m = discoveredPeers[id];
-                return `
-                <div class="card">
-                    <div class="card-avatar">${escapeHtml(m.avatar || '😊')}</div>
-                    <div class="card-info">
-                        <h3>${escapeHtml(m.name)}</h3>
-                        <p>${escapeHtml(m.bio || 'Pas de bio')}</p>
-                    </div>
-                    <button class="btn btn-primary" style="padding:8px 16px;" data-peer="${escapeHtml(id)}" aria-label="Connecter avec ${escapeHtml(m.name)}">💬</button>
-                </div>`;
-            }).join('');
-            container.querySelectorAll('[data-peer]').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const pid = btn.dataset.peer;
-                    addOrUpdateMatch(pid, discoveredPeers[pid]);
-                    openChat(pid);
-                });
-            });
-        }
-
-        // ========== MATCHS UI ==========
-        function renderMatches() {
-            const container = $('#matches-list');
-            const ids = Object.keys(STATE.matches).sort((a, b) =>
-                (STATE.matches[b].lastActivity || 0) - (STATE.matches[a].lastActivity || 0)
-            );
-            if (ids.length === 0) {
-                container.innerHTML = '<div class="empty-state" role="status" aria-live="polite">💔 Aucun match pour le moment.<br>Va dans "Découvrir" !</div>';
-                return;
-            }
-            container.innerHTML = ids.map(id => {
-                const m = STATE.matches[id];
-                const msgs = loadMessages(id);
-                const lastMsg = msgs.length ? escapeHtml(msgs[msgs.length - 1].text) : '<em>Pas encore de messages</em>';
-                const badge = m.unread > 0 ? `<span class="badge">${m.unread}</span>` : '';
-                return `
-                <div class="card">
-                    <div class="card-avatar">${escapeHtml(m.avatar || '😊')}</div>
-                    <div class="card-info">
-                        <h3>${escapeHtml(m.name)}${badge}</h3>
-                        <p>${lastMsg}</p>
-                    </div>
-                    <button class="btn btn-primary" style="padding:8px 16px;" data-peer="${escapeHtml(id)}" aria-label="Ouvrir la discussion avec ${escapeHtml(m.name)}">💬</button>
-                </div>`;
-            }).join('');
-            container.querySelectorAll('[data-peer]').forEach(btn => {
-                btn.addEventListener('click', () => openChat(btn.dataset.peer));
-            });
-        }
-
-        // ========== MESSAGERIE GUN ==========
-        // Chaque pair a un nœud Gun dédié à ses messages entrants : 'inbox-<monId>-from-<peerId>'
-        // Le destinataire écoute 'inbox-<monId>-from-*'
-
-        function inboxNode(fromId, toId) {
-            // Nœud où `fromId` dépose ses messages pour `toId`
-            return 'inbox-' + toId + '-from-' + fromId;
-        }
-
-        function startMessageListener(peerId) {
-            if (STATE.msgListeners[peerId]) return; // déjà en écoute
-            STATE.msgListeners[peerId] = true;
-
-            const node = inboxNode(peerId, STATE.myPeerId);
-            STATE.gun.get(node).map().on((data, msgKey) => {
-                if (!data || !data.text || !data.from) return;
-                if (data.from !== peerId) return;
-
-                const msgs = loadMessages(peerId);
-                // Déduplication par clé Gun (msgKey)
-                if (msgs.some(m => m.gunKey === msgKey)) return;
-
-                const msg = {
-                    text: data.text,
-                    time: data.time || nowTime(),
-                    sent: false,
-                    gunKey: msgKey
-                };
-                msgs.push(msg);
-                saveMessages(peerId);
-
-                if (STATE.currentChatPeer === peerId) {
-                    // Chat ouvert : afficher le message en direct
-                    const chatMsgs = $('#chat-messages');
-                    chatMsgs.insertAdjacentHTML('beforeend', renderMessageHTML(msg));
-                    chatMsgs.scrollTop = chatMsgs.scrollHeight;
-                } else {
-                    // Chat fermé : incrémenter le badge non-lu
-                    STATE.matches[peerId].unread = (STATE.matches[peerId].unread || 0) + 1;
-                    STATE.matches[peerId].lastActivity = Date.now();
-                    saveMatches();
-                    toast(`📩 Nouveau message de ${STATE.matches[peerId].name}`);
-                }
-            });
-        }
-
-        function sendGunMessage(peerId, text) {
-            // On écrit dans le nœud inbox du destinataire
-            const node = inboxNode(STATE.myPeerId, peerId);
-            const msgKey = Date.now().toString(36) + '-' + Math.random().toString(36).substr(2, 5);
-            STATE.gun.get(node).get(msgKey).put({
-                from: STATE.myPeerId,
-                text: text,
-                time: nowTime(),
-                ts: Date.now()
-            });
-        }
-
-        // ========== CHAT ==========
-        function openChat(peerId) {
-            const m = STATE.matches[peerId];
-            if (!m) return;
-
-            STATE.currentChatPeer = peerId;
-            $('#chat-peer-name').textContent = m.name || 'Anonyme';
-
-            const chatMsgs = $('#chat-messages');
-            const msgs = loadMessages(peerId);
-            chatMsgs.innerHTML = msgs.map(renderMessageHTML).join('');
-            $('#chat-overlay').classList.add('active');
-            chatMsgs.scrollTop = chatMsgs.scrollHeight;
-
-            // Réinitialiser les non-lus
-            if (m.unread) {
-                m.unread = 0;
-                saveMatches();
-            }
-
-            // Démarrer l'écoute Gun si pas encore fait
-            startMessageListener(peerId);
-        }
-
-        function renderMessageHTML(msg) {
-            const cls = msg.sent ? 'sent' : 'received';
-            return `<div class="message ${cls}">${escapeHtml(msg.text)}<time>${escapeHtml(msg.time || '')}</time></div>`;
-        }
-
-        function closeChat() {
-            $('#chat-overlay').classList.remove('active');
-            STATE.currentChatPeer = null;
-            renderMatches();
-        }
-
-        function sendMessage() {
-            const text = $('#input-message').value.trim();
-            if (!text || !STATE.currentChatPeer) return;
-            const peerId = STATE.currentChatPeer;
-
-            const msg = {
-                text,
-                time: nowTime(),
-                sent: true,
-                gunKey: null
-            };
-            const msgs = loadMessages(peerId);
-            msgs.push(msg);
-            saveMessages(peerId);
-
-            const chatMsgs = $('#chat-messages');
-            chatMsgs.insertAdjacentHTML('beforeend', renderMessageHTML(msg));
-            $('#input-message').value = '';
-            chatMsgs.scrollTop = chatMsgs.scrollHeight;
-
-            // Mise à jour du dernier message dans les matchs
-            STATE.matches[peerId].lastActivity = Date.now();
-            saveMatches();
-
-            // Envoi via Gun
-            sendGunMessage(peerId, text);
-        }
-
-        $('#btn-close-chat').addEventListener('click', closeChat);
-        $('#btn-send').addEventListener('click', sendMessage);
-        $('#input-message').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') sendMessage();
-        });
-
-        // ========== ID COPIE/PARTAGE ==========
-        $('#btn-copy-id').addEventListener('click', () => {
-            if (!STATE.myPeerId) return toast('⚠️ ID pas encore prêt');
-            navigator.clipboard.writeText(STATE.myPeerId)
-                .then(() => toast('📋 ID copié !'))
-                .catch(() => {
-                    // Fallback pour les navigateurs sans clipboard API
-                    const el = document.createElement('textarea');
-                    el.value = STATE.myPeerId;
-                    document.body.appendChild(el);
-                    el.select();
-                    document.execCommand('copy');
-                    el.remove();
-                    toast('📋 ID copié !');
-                });
-        });
-
-        $('#btn-share-id').addEventListener('click', () => {
-            if (!STATE.myPeerId) return toast('⚠️ ID pas encore prêt');
-            const shareData = { title: 'Mon ID Tinder P2P', text: STATE.myPeerId };
-            if (navigator.share) {
-                navigator.share(shareData).catch(() => {});
-            } else {
-                navigator.clipboard.writeText(STATE.myPeerId)
-                    .then(() => toast('📋 ID copié (partage non supporté)'))
-                    .catch(() => toast('❌ Erreur de copie'));
-            }
-        });
-
-        // ========== RÉGÉNÉRER L'ID ==========
-        $('#btn-regenerate-id').addEventListener('click', async () => {
-            if (!confirm('Cela va supprimer ton identité actuelle et tes contacts. Continuer ?')) return;
-
-            // Retirer l'annonce du réseau si visible
-            if (STATE.isDiscoverable && STATE.myPeerId) {
-                STATE.gun.get(STATE.discoveryNode).get(STATE.myPeerId).put(null);
-            }
-
-            localStorage.removeItem('p2p_keypair');
-            localStorage.removeItem('p2p_matches');
-            // Supprimer tous les messages sauvegardés
-            Object.keys(localStorage).filter(k => k.startsWith('p2p_msgs_')).forEach(k => localStorage.removeItem(k));
-
-            toast('🔄 Régénération en cours...');
-            location.reload();
-        });
-
-        // ========== NAVIGATION ==========
-        $$('nav button').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const screen = btn.dataset.screen;
-                $$('nav button').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                $$('.screen').forEach(s => s.classList.remove('active'));
-                $(`#screen-${screen}`).classList.add('active');
-                if (screen === 'matches') renderMatches();
-                if (screen === 'discover') renderDiscover();
-            });
-        });
-
-        // ========== DÉMARRAGE ==========
-        loadProfileUI();
-        initGun()
-            .then(() => {
-                // Démarrer l'écoute pour tous les matchs existants
-                Object.keys(STATE.matches).forEach(startMessageListener);
-                renderMatches();
-            })
-            .catch(e => {
-                console.error('Erreur Gun:', e);
-                $('#display-peer-id').textContent = '❌ Erreur réseau';
-                $('#network-status').textContent = '🔴 Réseau P2P inaccessible';
-            });
-
-    })();
-    </script>
+    <div class="btn-row">
+      <button class="primary" onclick="startCaller()">📱 Je crée la connexion (Caller)</button>
+      <button onclick="startCallee()">📲 J'ai reçu une Offer (Callee)</button>
+    </div>
+  </div>
+
+  <!-- STEP 2 CALLER : générer offer -->
+  <div class="card hidden" id="step-offer-gen">
+    <h2><span class="step-badge">2</span> Ton Offer SDP — à envoyer à l'autre</h2>
+    <div class="info-box">Clique "Générer", copie le texte et envoie-le à l'autre via n'importe quel canal (WhatsApp, SMS…).</div>
+    <button class="primary" onclick="generateOffer()" id="btn-gen-offer">Générer l'Offer</button>
+    <div id="offer-output" class="hidden" style="margin-top:0.75rem">
+      <textarea id="offer-sdp" readonly></textarea>
+      <div class="btn-row">
+        <button class="copy-btn" onclick="copyText('offer-sdp')">📋 Copier l'Offer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 3 CALLER : coller answer -->
+  <div class="card hidden" id="step-paste-answer">
+    <h2><span class="step-badge">3</span> Colle ici l'Answer de l'autre</h2>
+    <div class="info-box">L'autre a généré une Answer depuis ton Offer. Colle-la ici pour finaliser la connexion.</div>
+    <textarea id="answer-input" placeholder="Colle le JSON Answer ici..."></textarea>
+    <div class="btn-row">
+      <button class="primary" onclick="applyAnswer()">✅ Connecter</button>
+    </div>
+  </div>
+
+  <!-- STEP 2 CALLEE : coller offer -->
+  <div class="card hidden" id="step-paste-offer">
+    <h2><span class="step-badge">2</span> Colle ici l'Offer reçue</h2>
+    <div class="info-box">L'initiateur t'a envoyé un bloc JSON. Colle-le ci-dessous.</div>
+    <textarea id="offer-input" placeholder="Colle le JSON Offer ici..."></textarea>
+    <div class="btn-row">
+      <button class="primary" onclick="generateAnswer()">Générer l'Answer</button>
+    </div>
+  </div>
+
+  <!-- STEP 3 CALLEE : copier answer -->
+  <div class="card hidden" id="step-answer-gen">
+    <h2><span class="step-badge">3</span> Ton Answer SDP — à renvoyer à l'initiateur</h2>
+    <div class="info-box">Copie ce texte et envoie-le à l'initiateur via le même canal.</div>
+    <textarea id="answer-sdp" readonly></textarea>
+    <div class="btn-row">
+      <button class="copy-btn" onclick="copyText('answer-sdp')">📋 Copier l'Answer</button>
+    </div>
+    <div class="info-box" style="margin-top:0.5rem">
+      Attends que l'initiateur colle ton Answer. La connexion s'ouvrira automatiquement.
+    </div>
+  </div>
+
+  <!-- CONNECTED: Chat -->
+  <div class="card chat-section" id="chat-section">
+    <h2>💬 Canal P2P — chiffré DTLS</h2>
+    <div class="messages" id="messages">
+      <div class="msg system">Connexion établie. Aucun serveur intermédiaire.</div>
+    </div>
+    <div class="msg-input-row">
+      <input type="text" id="msg-input" placeholder="Ton message..." onkeydown="if(event.key==='Enter')sendMsg()">
+      <button class="primary" onclick="sendMsg()">Envoyer</button>
+    </div>
+  </div>
+
+  <!-- CONNECTED: Profils partagés (démo Tinder-like) -->
+  <div class="card profiles-section" id="profiles-section">
+    <h2>💘 Partage de profil P2P</h2>
+    <div class="profile-card">
+      <div class="profile-avatar" id="remote-avatar">👤</div>
+      <div class="profile-info">
+        <h3 id="remote-name">En attente...</h3>
+        <p id="remote-bio">Le profil de l'autre apparaîtra ici une fois connecté.</p>
+      </div>
+    </div>
+    <div class="swipe-btns">
+      <button class="swipe-btn nope" onclick="swipe('nope')">✕</button>
+      <button class="swipe-btn like" onclick="swipe('like')">♥</button>
+    </div>
+    <div class="info-box" id="match-box" style="display:none; text-align:center; font-weight:600;">
+      🎉 C'est un match ! (les deux ont liké)
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── Config WebRTC ───────────────────────────────────────────────────────────
+// STUN uniquement — aucune donnée ne transite par ces serveurs,
+// ils servent juste à découvrir l'IP publique pour le NAT traversal.
+// Sur LAN local, même pas nécessaire (retirez iceServers pour LAN pur).
+const RTC_CONFIG = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' }
+  ]
+};
+
+// ─── État ────────────────────────────────────────────────────────────────────
+let pc = null;         // RTCPeerConnection
+let dc = null;         // RTCDataChannel
+let role = null;       // 'caller' | 'callee'
+let likedRemote = false;
+let remotelikedMe = false;
+
+const MY_PROFILE = {
+  name: 'Mohammed R.',
+  bio: 'Développeur Flutter · Oran 🇩🇿',
+  avatar: '👨‍💻'
+};
+
+// ─── UI helpers ──────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const show = id => $(id).classList.remove('hidden');
+const hide = id => $(id).classList.add('hidden');
+
+function setStatus(text, state) {
+  $('status-text').textContent = text;
+  $('dot').className = 'dot' + (state ? ' ' + state : '');
+}
+
+function copyText(id) {
+  const el = $(id);
+  navigator.clipboard.writeText(el.value).then(() => {
+    alert('Copié dans le presse-papiers ✓');
+  });
+}
+
+function addMsg(text, cls) {
+  const d = document.createElement('div');
+  d.className = 'msg ' + cls;
+  d.textContent = text;
+  $('messages').appendChild(d);
+  $('messages').scrollTop = $('messages').scrollHeight;
+}
+
+// ─── Création RTCPeerConnection ──────────────────────────────────────────────
+function createPeer() {
+  pc = new RTCPeerConnection(RTC_CONFIG);
+
+  // Quand les ICE candidates sont prêts, le SDP local est complet
+  pc.onicecandidate = e => {
+    // onicecandidate avec null = gathering terminé → afficher le SDP final
+    if (e.candidate === null) {
+      if (role === 'caller') {
+        $('offer-sdp').value = JSON.stringify(pc.localDescription);
+        show('offer-output');
+        setStatus('Offer générée — envoie-la à l\'autre', 'connecting');
+      } else {
+        $('answer-sdp').value = JSON.stringify(pc.localDescription);
+        show('step-answer-gen');
+        setStatus('Answer générée — renvoie-la à l\'initiateur', 'connecting');
+      }
+    }
+  };
+
+  pc.onconnectionstatechange = () => {
+    const s = pc.connectionState;
+    if (s === 'connected') onConnected();
+    if (s === 'disconnected' || s === 'failed') {
+      setStatus('Connexion perdue', '');
+      $('chat-section').classList.remove('visible');
+      $('profiles-section').classList.remove('visible');
+    }
+  };
+
+  pc.ondatachannel = e => {
+    // Callee reçoit le DataChannel ouvert par le caller
+    setupDataChannel(e.channel);
+  };
+}
+
+// ─── DataChannel ─────────────────────────────────────────────────────────────
+function setupDataChannel(channel) {
+  dc = channel;
+  dc.onopen = () => {
+    onConnected();
+    // Envoyer son profil dès que le canal est ouvert
+    dc.send(JSON.stringify({ type: 'profile', data: MY_PROFILE }));
+  };
+  dc.onmessage = e => {
+    try {
+      const msg = JSON.parse(e.data);
+      if (msg.type === 'chat') {
+        addMsg(msg.text, 'in');
+      } else if (msg.type === 'profile') {
+        $('remote-avatar').textContent = msg.data.avatar;
+        $('remote-name').textContent = msg.data.name;
+        $('remote-bio').textContent = msg.data.bio;
+      } else if (msg.type === 'swipe') {
+        remotelikedMe = (msg.action === 'like');
+        checkMatch();
+      }
+    } catch {
+      // message brut (compatibilité)
+      addMsg(e.data, 'in');
+    }
+  };
+  dc.onclose = () => setStatus('Canal fermé', '');
+}
+
+function onConnected() {
+  setStatus('Connecté — P2P direct', 'connected');
+  $('step-role').classList.add('hidden');
+  hide('step-offer-gen');
+  hide('step-paste-answer');
+  hide('step-paste-offer');
+  hide('step-answer-gen');
+  $('chat-section').classList.add('visible');
+  $('profiles-section').classList.add('visible');
+}
+
+// ─── CALLER flow ─────────────────────────────────────────────────────────────
+function startCaller() {
+  role = 'caller';
+  $('role-badge').textContent = 'Caller';
+  $('role-badge').className = 'tag';
+  hide('step-role');
+  show('step-offer-gen');
+  createPeer();
+}
+
+async function generateOffer() {
+  // Créer le DataChannel côté caller AVANT createOffer
+  dc = pc.createDataChannel('app');
+  setupDataChannel(dc);
+
+  $('btn-gen-offer').disabled = true;
+  $('btn-gen-offer').textContent = 'Génération en cours…';
+
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  // onicecandidate(null) appellera l'affichage du SDP complet
+  // Afficher aussi l'étape suivante en avance
+  show('step-paste-answer');
+  setStatus('Collecte ICE en cours…', 'connecting');
+}
+
+async function applyAnswer() {
+  try {
+    const raw = $('answer-input').value.trim();
+    const answer = JSON.parse(raw);
+    await pc.setRemoteDescription(new RTCSessionDescription(answer));
+    setStatus('Connexion en cours…', 'connecting');
+  } catch (err) {
+    alert('JSON invalide ou erreur WebRTC: ' + err.message);
+  }
+}
+
+// ─── CALLEE flow ─────────────────────────────────────────────────────────────
+function startCallee() {
+  role = 'callee';
+  $('role-badge').textContent = 'Callee';
+  $('role-badge').className = 'tag success';
+  hide('step-role');
+  show('step-paste-offer');
+  createPeer();
+}
+
+async function generateAnswer() {
+  try {
+    const raw = $('offer-input').value.trim();
+    const offer = JSON.parse(raw);
+    await pc.setRemoteDescription(new RTCSessionDescription(offer));
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    setStatus('Collecte ICE en cours…', 'connecting');
+    // onicecandidate(null) affichera l'Answer complète
+  } catch (err) {
+    alert('JSON invalide ou erreur WebRTC: ' + err.message);
+  }
+}
+
+// ─── Chat ─────────────────────────────────────────────────────────────────────
+function sendMsg() {
+  const input = $('msg-input');
+  const text = input.value.trim();
+  if (!text || !dc || dc.readyState !== 'open') return;
+  dc.send(JSON.stringify({ type: 'chat', text }));
+  addMsg(text, 'out');
+  input.value = '';
+}
+
+// ─── Swipe Tinder-like ───────────────────────────────────────────────────────
+function swipe(action) {
+  if (!dc || dc.readyState !== 'open') return;
+  dc.send(JSON.stringify({ type: 'swipe', action }));
+  if (action === 'like') likedRemote = true;
+  checkMatch();
+}
+
+function checkMatch() {
+  if (likedRemote && remotelikedMe) {
+    $('match-box').style.display = 'block';
+    addMsg('🎉 C\'est un MATCH !', 'system');
+  }
+}
+</script>
 </body>
 </html>
