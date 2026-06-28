@@ -407,9 +407,9 @@
         </nav>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/gun@0.2020.1239/gun.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/gun@0.2020.1239/sea.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/gun@0.2020.1239/lib/webrtc.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gun/sea.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gun/lib/webrtc.js"></script>
     <script>
         (function() {
             // ========== ÉTAT ==========
@@ -464,10 +464,9 @@
             }
 
             async function initGun() {
-                $('#network-status').textContent = '🔵 Connexion au réseau P2P...';
-                $('#display-peer-id').textContent = '⏳ Initialisation...';
+                $('#network-status').textContent = '🔵 Préparation...';
+                $('#display-peer-id').textContent = '⏳ ...';
 
-                // Vérification des dépendances
                 if (typeof Gun === 'undefined' || typeof SEA === 'undefined') {
                     $('#display-peer-id').textContent = '❌ Bibliothèques manquantes';
                     $('#network-status').textContent = '🔴 Vérifie ta connexion internet';
@@ -475,6 +474,26 @@
                 }
 
                 try {
+                    $('#network-status').textContent = '🔵 Génération de l\'identité...';
+                    let pair = localStorage.getItem('p2p_keypair');
+                    if (pair) {
+                        try { pair = JSON.parse(pair); } catch(e) { pair = null; }
+                    }
+
+                    if (!pair) {
+                        // Timeout pour SEA.pair() au cas où l'entropie manque
+                        const pairPromise = SEA.pair();
+                        const timeoutPromise = new Promise((_, reject) =>
+                            setTimeout(() => reject(new Error("Timeout SEA.pair")), 5000)
+                        );
+                        pair = await Promise.race([pairPromise, timeoutPromise]);
+                        localStorage.setItem('p2p_keypair', JSON.stringify(pair));
+                    }
+
+                    STATE.myPeerId = pair.pub;
+                    $('#display-peer-id').textContent = STATE.myPeerId.substring(0, 10) + '...';
+
+                    $('#network-status').textContent = '🔵 Connexion aux relais...';
                     STATE.gun = Gun({
                         peers: [
                             'https://gun-manhattan.herokuapp.com/gun',
@@ -482,6 +501,7 @@
                             'https://dletta.herokuapp.com/gun',
                             'https://gun-us.herokuapp.com/gun'
                         ],
+                        localStorage: true,
                         rtc: {
                             iceServers: [
                                 { urls: 'stun:stun.l.google.com:19302' },
@@ -491,30 +511,19 @@
                         }
                     });
 
-                    // Génération ou récupération d'une paire de clés (Web3 identity)
-                    let pair = localStorage.getItem('p2p_keypair');
-                    if (pair) {
-                        try {
-                            pair = JSON.parse(pair);
-                        } catch(e) { pair = null; }
-                    }
-
-                    if (!pair) {
-                        pair = await SEA.pair();
-                        localStorage.setItem('p2p_keypair', JSON.stringify(pair));
-                    }
-
-                    STATE.myPeerId = pair.pub;
-                    $('#display-peer-id').textContent = STATE.myPeerId.substring(0, 15) + '...';
-                    $('#network-status').textContent = '🟢 Connecté au réseau P2P';
-
+                    $('#network-status').textContent = '🟢 Prêt (P2P)';
                     setupGunListeners();
                     return STATE.myPeerId;
                 } catch (e) {
-                    console.error("Gun Init Error:", e);
-                    $('#display-peer-id').textContent = '❌ Erreur réseau';
-                    $('#network-status').textContent = '🔴 Échec';
-                    throw e;
+                    console.error("Gun/SEA Init Error:", e);
+                    $('#display-peer-id').textContent = '❌ Échec ID';
+                    $('#network-status').textContent = '🔴 Erreur fatale';
+
+                    // Fallback ID si SEA échoue totalement
+                    const fallback = 'anon-' + Math.random().toString(36).substr(2, 9);
+                    STATE.myPeerId = fallback;
+                    $('#display-peer-id').textContent = fallback;
+                    $('#network-status').textContent = '🟠 Mode anonyme (échec identité)';
                 }
             }
 
