@@ -623,21 +623,40 @@
             if (peerId === STATE.myPeerId) return toast('⚠️ C\'est ton propre ID');
 
             toast('🔍 Recherche du profil...');
-            STATE.gun.get(STATE.discoveryNode).get(peerId).once((data) => {
-                if (data && data.profile) {
-                    try {
-                        const profile = JSON.parse(data.profile);
-                        addOrUpdateMatch(peerId, profile);
-                        $('#input-peer-id').value = '';
-                        toast('✅ Ami ajouté !');
-                        openChat(peerId);
-                    } catch(e) {
-                        toast('❌ Profil invalide');
-                    }
-                } else {
-                    toast('❌ Profil introuvable (l\'utilisateur doit être visible)');
+            const btn = $('#btn-connect');
+            btn.disabled = true;
+
+            // .once() lit uniquement le cache local Gun et peut retourner null
+            // si la donnée n'est pas encore synchronisée depuis les pairs distants.
+            // On utilise .on() avec un timeout de 8s pour attendre la propagation réseau.
+            let found = false;
+            const node = STATE.gun.get(STATE.discoveryNode).get(peerId);
+
+            const handler = node.on((data) => {
+                if (!data || !data.profile) return; // null ou pas encore arrivé
+                if (found) return;
+                found = true;
+                handler.off(); // stopper l'écoute
+                clearTimeout(timer);
+                btn.disabled = false;
+
+                try {
+                    const profile = JSON.parse(data.profile);
+                    addOrUpdateMatch(peerId, profile);
+                    $('#input-peer-id').value = '';
+                    toast('✅ Ami ajouté !');
+                    openChat(peerId);
+                } catch(e) {
+                    toast('❌ Profil reçu mais invalide');
                 }
             });
+
+            const timer = setTimeout(() => {
+                if (found) return;
+                handler.off();
+                btn.disabled = false;
+                toast('❌ Profil introuvable — vérifie que l\'ID est correct et que l\'utilisateur est visible');
+            }, 8000);
         });
 
         // ========== MATCHS ==========
