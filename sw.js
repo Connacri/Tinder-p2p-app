@@ -1,4 +1,4 @@
-const CACHE = 'tinder-p2p-v2';
+const CACHE = 'tinder-p2p-v3';
 const FILES = [
     '/tinder-p2p-pwa/',
     '/tinder-p2p-pwa/index.html',
