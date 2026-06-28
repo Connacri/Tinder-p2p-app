@@ -344,22 +344,27 @@
             </div>
             <div class="profile-img-container">
                 <div class="profile-img" id="profile-avatar">😊</div>
-                <div class="profile-img-overlay" id="btn-change-avatar">📷</div>
+                <button class="profile-img-overlay" id="btn-change-avatar" aria-label="Changer l'avatar" style="border:none; font-family:inherit;">📷</button>
             </div>
             <div class="input-group">
+                <label for="input-name" style="display:block; font-size:12px; margin-bottom:4px; color:var(--text-secondary); font-weight:600; text-align:left; padding-left:4px;">PRÉNOM</label>
                 <input class="input-field" id="input-name" placeholder="Ton prénom" maxlength="30">
             </div>
             <div class="input-group">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; padding:0 4px;">
+                    <label for="input-bio" style="font-size:12px; color:var(--text-secondary); font-weight:600;">BIO</label>
+                    <span id="bio-counter" style="font-size:11px; color:var(--text-secondary);">0/150</span>
+                </div>
                 <textarea class="input-field" id="input-bio" placeholder="Ta bio..." rows="2" maxlength="150"></textarea>
             </div>
-            <button class="btn btn-primary" id="btn-save-profile" style="width:100%;">💾 Sauvegarder</button>
+            <button class="btn btn-primary" id="btn-save-profile" style="width:100%;" aria-label="Sauvegarder le profil">💾 Sauvegarder</button>
             <div class="id-box">
                 <strong>🔑 Ton ID unique</strong>
                 <div class="id-value" id="display-peer-id">⏳ Initialisation...</div>
                 <div style="display:flex; gap:8px; justify-content:center; margin-top:12px;">
-                    <button class="btn btn-ghost" id="btn-copy-id">📋 Copier</button>
-                    <button class="btn btn-ghost" id="btn-share-id">📤 Partager</button>
-                    <button class="btn btn-ghost" id="btn-regenerate-id">🔄 Régénérer</button>
+                    <button class="btn btn-ghost" id="btn-copy-id" aria-label="Copier l'ID">📋 Copier</button>
+                    <button class="btn btn-ghost" id="btn-share-id" aria-label="Partager l'ID">📤 Partager</button>
+                    <button class="btn btn-ghost" id="btn-regenerate-id" aria-label="Régénérer l'ID">🔄 Régénérer</button>
                 </div>
                 <p style="margin-top:8px; font-size:12px; color:var(--text-secondary);" id="network-status"></p>
             </div>
@@ -372,6 +377,7 @@
                 <button class="btn btn-success" id="btn-toggle-discover">OFF</button>
             </div>
             <div class="input-group">
+                <label for="input-peer-id" style="display:block; font-size:12px; margin-bottom:4px; color:var(--text-secondary); font-weight:600; text-align:left; padding-left:4px;">REJOINDRE UN AMI</label>
                 <input class="input-field" id="input-peer-id" placeholder="Colle l'ID d'un profil ici...">
             </div>
             <button class="btn btn-primary" id="btn-connect" style="width:100%; margin-bottom:20px;">🔗 Se connecter</button>
@@ -389,25 +395,26 @@
         <!-- Chat overlay -->
         <div id="chat-overlay" class="chat-overlay">
             <div class="chat-header">
-                <button class="btn btn-ghost" id="btn-close-chat" style="padding:8px 12px;">← Retour</button>
+                <button class="btn btn-ghost" id="btn-close-chat" style="padding:8px 12px;" aria-label="Retour aux matchs">← Retour</button>
                 <h3 id="chat-peer-name">Chat</h3>
             </div>
             <div class="chat-messages" id="chat-messages"></div>
             <div class="chat-input-bar">
-                <input type="text" id="input-message" placeholder="Écris un message..." maxlength="500">
-                <button class="btn btn-primary" id="btn-send" style="padding:12px 16px;">➤</button>
+                <input type="text" id="input-message" placeholder="Écris un message..." maxlength="500" aria-label="Message à envoyer">
+                <button class="btn btn-primary" id="btn-send" style="padding:12px 16px;" aria-label="Envoyer le message">➤</button>
             </div>
         </div>
 
         <!-- Navigation -->
         <nav>
-            <button class="active" data-screen="profile">👤<small>Profil</small></button>
-            <button data-screen="discover">🔍<small>Découvrir</small></button>
-            <button data-screen="matches">💝<small>Matchs</small></button>
+            <button class="active" data-screen="profile" aria-label="Profil">👤<small>Profil</small></button>
+            <button data-screen="discover" aria-label="Découvrir">🔍<small>Découvrir</small></button>
+            <button data-screen="matches" aria-label="Matchs">💝<small>Matchs</small></button>
         </nav>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bugout@0.0.10/index.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gun/sea.js"></script>
     <script>
         (function() {
             // ========== ÉTAT ==========
@@ -420,8 +427,9 @@
                 messages: {}, // Loaded on demand
                 messages: {}, // Loaded on demand
                 currentChatPeer: null,
-                bugout: null,
-                seenPeers: new Set()
+                gun: null,
+                user: null,
+                discoveryNode: 'tinder-p2p-discovery-v3'
             };
 
             // ========== UTILITAIRES ==========
@@ -429,7 +437,7 @@
             const $$ = (s) => document.querySelectorAll(s);
             const toast = (msg) => {
                 const t = document.createElement('div');
-                t.className = 'toast';
+                t.className = 'toast'; t.setAttribute('role', 'alert'); t.setAttribute('aria-live', 'assertive');
                 t.textContent = msg;
                 document.body.appendChild(t);
                 setTimeout(() => t.remove(), 3000);
@@ -441,6 +449,48 @@
                 $('#input-bio').value = STATE.profile.bio;
                 $('#profile-avatar').textContent = STATE.profile.avatar;
             }
+
+
+            // ========== LIVE FEEDBACK & ACCESSIBILITY ==========
+            const inputName = $('#input-name');
+            const inputBio = $('#input-bio');
+            const bioCounter = $('#bio-counter');
+            const profileAvatarDisplay = $('#profile-avatar');
+
+            function updateBioCounter() {
+                const len = inputBio.value.length;
+                bioCounter.textContent = `${len}/150`;
+                if (len >= 140) bioCounter.style.color = 'var(--primary)';
+                else bioCounter.style.color = 'var(--text-secondary)';
+            }
+
+            inputBio.addEventListener('input', updateBioCounter);
+            inputName.addEventListener('input', () => {
+                // No direct display in the profile screen's header,
+                // but let's assume we want to show feedback or just keep it for consistency.
+                // In this app, the 'live preview' is essentially the profile screen itself
+                // as it uses the same inputs. But we can add a subtle 'Saved' / 'Unsaved' indicator.
+                $('#btn-save-profile').style.opacity = '1';
+                $('#btn-save-profile').textContent = '💾 Sauvegarder';
+            });
+
+            inputBio.addEventListener('input', () => {
+                $('#btn-save-profile').style.opacity = '1';
+                $('#btn-save-profile').textContent = '💾 Sauvegarder';
+            });
+
+
+            // Initial call
+            setTimeout(updateBioCounter, 500);
+
+            // Add visual feedback to avatar change (accessibility)
+            const btnChangeAvatar = $('#btn-change-avatar');
+            btnChangeAvatar.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    btnChangeAvatar.click();
+                }
+            });
 
             $('#btn-save-profile').addEventListener('click', () => {
                 STATE.profile.name = $('#input-name').value.trim();
@@ -463,10 +513,39 @@
                 return 'local-' + Math.random().toString(36).substr(2, 9) + '-' + Date.now().toString(36);
             }
 
-            async function initBugout() {
+            async function initGun() {
                 $('#network-status').textContent = '🔵 Connexion au réseau P2P...';
-                if (typeof Bugout === 'undefined') {
-                    throw new Error('Bugout non chargé');
+                $('#display-peer-id').textContent = '⏳ Initialisation...';
+
+                try {
+                    STATE.gun = Gun({
+                        peers: [
+                            'https://gun-manhattan.herokuapp.com/gun',
+                            'https://peer.wall.org/gun',
+                            'https://dletta.herokuapp.com/gun'
+                        ]
+                    });
+
+                    // Génération ou récupération d'une paire de clés (Web3 identity)
+                    let pair = localStorage.getItem('p2p_keypair');
+                    if (pair) {
+                        pair = JSON.parse(pair);
+                    } else {
+                        pair = await SEA.pair();
+                        localStorage.setItem('p2p_keypair', JSON.stringify(pair));
+                    }
+
+                    STATE.myPeerId = pair.pub;
+                    $('#display-peer-id').textContent = STATE.myPeerId.substring(0, 15) + '...';
+                    $('#network-status').textContent = '🟢 Connecté au réseau P2P';
+
+                    setupGunListeners();
+                    return STATE.myPeerId;
+                } catch (e) {
+                    console.error("Gun Init Error:", e);
+                    $('#display-peer-id').textContent = '❌ Erreur de connexion';
+                    $('#network-status').textContent = '🔴 Échec du réseau';
+                    throw e;
                 }
                 const bugoutOpts = {}; if (STATE.seed) bugoutOpts.seed = STATE.seed; STATE.bugout = new Bugout(bugoutOpts);
                 return new Promise((resolve, reject) => {
@@ -505,16 +584,15 @@
                 });
             }
 
-            function setupNetworkListeners() {
-                if (!STATE.bugout) return;
-                STATE.bugout.on('seen', (addr) => {
-                    if (addr !== STATE.myPeerId && !STATE.seenPeers.has(addr)) {
-                        STATE.seenPeers.add(addr);
-                        console.log('👀 Vu:', addr);
-                        if (STATE.isDiscoverable) {
-                            STATE.bugout.send(addr, { type: 'ping', profile: STATE.profile });
-                            toast(`🔍 Tentative de connexion automatique...`);
-                        }
+            function setupGunListeners() {
+                // Écoute de la découverte globale
+                STATE.gun.get(STATE.discoveryNode).map().on((data, pub) => {
+                    if (pub === STATE.myPeerId) return;
+                    if (data && data.profile) {
+                        try {
+                            const profile = JSON.parse(data.profile);
+                            addOrUpdateDiscover(pub, profile);
+                        } catch(e) { console.error("Err parse profile", e); }
                     }
                 });
                 STATE.bugout.on('message', (addr, data) => {
@@ -545,13 +623,23 @@
                 });
             }
 
+            function addOrUpdateDiscover(pub, profile) {
+                // On ne l'ajoute aux matchs que si on a un échange ou si on "like"
+                // Pour l'instant on l'affiche juste dans Discover
+                if (!STATE.matches[pub]) {
+                    renderDiscover(pub, profile);
+                }
+            }
+
             function setupFallbackListeners() {
                 console.log('Mode fallback : connexion manuelle uniquement');
             }
 
             $('#btn-regenerate-id').addEventListener('click', async () => {
-                if (STATE.bugout) {
-                    try { STATE.bugout.destroy?.(); } catch(e) {}
+                if (confirm('Cela va supprimer ton identité actuelle et tes contacts. Continuer ?')) {
+                    localStorage.removeItem('p2p_keypair');
+                    localStorage.removeItem('p2p_matches');
+                    location.reload();
                 }
                 STATE.myPeerId = null;
                 localStorage.removeItem('p2p_seed'); STATE.seed = null;
@@ -570,7 +658,17 @@
                 const btn = $('#btn-toggle-discover');
                 btn.textContent = STATE.isDiscoverable ? 'ON' : 'OFF';
                 btn.className = `btn ${STATE.isDiscoverable ? 'btn-success' : ''}`;
-                toast(STATE.isDiscoverable ? '📡 Tu es visible !' : '🔒 Tu es invisible.');
+
+                if (STATE.isDiscoverable) {
+                    STATE.gun.get(STATE.discoveryNode).get(STATE.myPeerId).put({
+                        profile: JSON.stringify(STATE.profile),
+                        timestamp: Date.now()
+                    });
+                    toast('📡 Tu es visible !');
+                } else {
+                    STATE.gun.get(STATE.discoveryNode).get(STATE.myPeerId).put(null);
+                    toast('🔒 Tu es invisible.');
+                }
             });
 
             // ========== CONNEXION MANUELLE ==========
@@ -578,13 +676,18 @@
                 const peerId = $('#input-peer-id').value.trim();
                 if (!peerId) return toast('⚠️ Entre un ID');
                 if (peerId === STATE.myPeerId) return toast('⚠️ C\'est ton ID');
-                if (STATE.matches[peerId]) return toast('💬 Déjà en contact');
-                if (!STATE.bugout) return toast('❌ Pas de connexion réseau');
-                STATE.bugout.send(peerId, { type: 'ping', profile: STATE.profile });
-                toast('🔍 Recherche...');
-                setTimeout(() => {
-                    if (!STATE.matches[peerId]) toast('❌ Personne trouvée avec cet ID');
-                }, 8000);
+
+                toast('🔍 Recherche du profil...');
+                STATE.gun.get(STATE.discoveryNode).get(peerId).once((data) => {
+                    if (data && data.profile) {
+                        const profile = JSON.parse(data.profile);
+                        addOrUpdateMatch(peerId, profile);
+                        toast('✅ Ami ajouté !');
+                        openChat(peerId);
+                    } else {
+                        toast('❌ Profil introuvable');
+                    }
+                });
             });
 
             // ========== MATCHS ==========
@@ -648,7 +751,7 @@
                 const container = $('#matches-list');
                 const ids = Object.keys(STATE.matches);
                 if (ids.length === 0) {
-                    container.innerHTML = '<div class="empty-state">💔 Aucun match pour le moment.<br>Va dans "Découvrir" !</div>';
+                    container.innerHTML = '<div class="empty-state" role="status" aria-live="polite">💔 Aucun match pour le moment.<br>Va dans "Découvrir" !</div>';
                     return;
                 }
                 container.innerHTML = ids.map(id => {
@@ -661,7 +764,7 @@
                             <h3>${m.name} ${m.starred ? '⭐' : ''}</h3>
                             <p>${lastMsg}</p>
                         </div>
-                        <button class="btn btn-primary" style="padding:8px 16px;" data-peer="${id}">💬</button>
+                        <button class="btn btn-primary" style="padding:8px 16px;" data-peer="${id}" aria-label="Ouvrir la discussion avec ${m.name}">💬</button>
                     </div>`;
                 }).join('');
                 // Attacher les événements
@@ -673,15 +776,17 @@
                 });
             }
 
-            function renderDiscover() {
+            const discoveredPeers = {};
+            function renderDiscover(pub, profile) {
+                if (pub) discoveredPeers[pub] = profile;
                 const container = $('#discover-list');
-                const ids = Object.keys(STATE.matches);
+                const ids = Object.keys(discoveredPeers);
                 if (ids.length === 0) {
-                    container.innerHTML = '<div class="empty-state">🔍 Aucun profil découvert.<br>Active la découverte ou entre un ID manuellement.</div>';
+                    container.innerHTML = '<div class="empty-state" role="status" aria-live="polite">🔍 Aucun profil découvert.<br>Active la découverte ou entre un ID manuellement.</div>';
                     return;
                 }
                 container.innerHTML = ids.map(id => {
-                    const m = STATE.matches[id];
+                    const m = discoveredPeers[id];
                     return `
                     <div class="card">
                         <div class="card-avatar">${m.avatar}</div>
@@ -689,12 +794,13 @@
                             <h3>${m.name}</h3>
                             <p>${m.bio || 'Pas de bio'}</p>
                         </div>
-                        <button class="btn btn-primary" style="padding:8px 16px;" data-peer="${id}">💬</button>
+                        <button class="btn btn-primary" style="padding:8px 16px;" data-peer="${id}" aria-label="Ouvrir la discussion avec ${m.name}">💬</button>
                     </div>`;
                 }).join('');
                 container.querySelectorAll('.btn-primary').forEach(btn => {
                     btn.addEventListener('click', (e) => {
                         e.stopPropagation();
+                        addOrUpdateMatch(btn.dataset.peer, discoveredPeers[btn.dataset.peer]);
                         openChat(btn.dataset.peer);
                     });
                 });
@@ -789,6 +895,42 @@
                 msgs.push(msg);
                 saveMessages(peerId);
 
+                if (STATE.gun) {
+                    const msgId = Math.random().toString(36).substring(2);
+                    STATE.gun.get('msgs-' + STATE.currentChatPeer).get(msgId).put({
+                        from: STATE.myPeerId,
+                        text: text,
+                        time: Date.now(),
+                        read: false
+                    });
+                }
+            }
+
+            function receiveMessage(peerId, text) {
+                // Si on reçoit un message de quelqu'un qui n'est pas encore un match, on l'ajoute
+                if (!STATE.matches[peerId]) {
+                    // On essaie de récupérer son profil via la découverte
+                    STATE.gun.get(STATE.discoveryNode).get(peerId).once(data => {
+                        let name = "Anonyme";
+                        let avatar = "😊";
+                        if (data && data.profile) {
+                            const p = JSON.parse(data.profile);
+                            name = p.name;
+                            avatar = p.avatar;
+                        }
+                        addOrUpdateMatch(peerId, {name, avatar, messages: []});
+                        processIncomingMessage(peerId, text);
+                    });
+                } else {
+                    processIncomingMessage(peerId, text);
+                }
+            }
+
+            function processIncomingMessage(peerId, text) {
+                const msg = { text, time: new Date().toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' }), sent: false };
+                STATE.matches[peerId].messages.push(msg);
+                STATE.matches[peerId].unread = (STATE.matches[peerId].unread || 0) + 1;
+                saveMatches();
                 if (STATE.currentChatPeer === peerId) {
                     const chatMsgs = $('#chat-messages');
                     chatMsgs.insertAdjacentHTML('beforeend', renderMessageHTML(msg));
@@ -840,9 +982,9 @@
 
             // ========== DÉMARRAGE ==========
             loadProfileUI();
-            initBugout().catch(e => {
+            initGun().catch(e => {
                 console.error(e);
-                $('#display-peer-id').textContent = '❌ Erreur critique';
+                $('#display-peer-id').textContent = '❌ Erreur réseau';
                 $('#network-status').textContent = '🔴 Échec';
             });
             renderMatches();
