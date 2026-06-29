@@ -284,6 +284,87 @@
 </style>
 </head>
 <body>
+    <div id="app">
+        <!-- Profil -->
+        <section id="screen-profile" class="screen active">
+            <div class="header">
+                <h2>👤 Mon Profil</h2>
+                <span style="color:var(--success);font-weight:600;" id="profile-status">🟢 En ligne</span>
+            </div>
+            <div class="profile-img-container">
+                <div class="profile-img" id="profile-avatar">😊</div>
+                <button class="profile-img-overlay" id="btn-change-avatar" aria-label="Changer l'avatar" style="border:none; font-family:inherit;">📷</button>
+            </div>
+            <div class="input-group">
+                <label for="input-name" style="display:block; font-size:12px; margin-bottom:4px; color:var(--text-secondary); font-weight:600; text-align:left; padding-left:4px;">PRÉNOM</label>
+                <input class="input-field" id="input-name" placeholder="Ton prénom" maxlength="30">
+            </div>
+            <div class="input-group">
+                <label for="input-phone" style="display:block; font-size:12px; margin-bottom:4px; color:var(--text-secondary); font-weight:600; text-align:left; padding-left:4px;">NUMÉRO DE TÉLÉPHONE</label>
+                <input class="input-field" id="input-phone" placeholder="+33 ..." maxlength="20">
+            </div>
+            <div class="input-group">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; padding:0 4px;">
+                    <label for="input-bio" style="font-size:12px; color:var(--text-secondary); font-weight:600;">BIO</label>
+                    <span id="bio-counter" style="font-size:11px; color:var(--text-secondary);">0/150</span>
+                </div>
+                <textarea class="input-field" id="input-bio" placeholder="Ta bio..." rows="2" maxlength="150"></textarea>
+            </div>
+            <button class="btn btn-primary" id="btn-save-profile" style="width:100%;" aria-label="Sauvegarder le profil">💾 Sauvegarder</button>
+            <div class="id-box">
+                <strong>🔑 Ton ID unique</strong>
+                <div class="id-value" id="display-peer-id">⏳ Initialisation...</div>
+                <div style="display:flex; gap:8px; justify-content:center; margin-top:12px;">
+                    <button class="btn btn-ghost" id="btn-copy-id" aria-label="Copier l'ID">📋 Copier</button>
+                    <button class="btn btn-ghost" id="btn-share-id" aria-label="Partager l'ID">📤 Partager</button>
+                    <button class="btn btn-ghost" id="btn-regenerate-id" aria-label="Régénérer l'ID">🔄 Régénérer</button>
+                </div>
+                <p style="margin-top:8px; font-size:12px; color:var(--text-secondary);" id="network-status"></p>
+            </div>
+        </section>
+
+        <!-- Découvrir -->
+        <section id="screen-discover" class="screen">
+            <div class="header">
+                <h2>🔍 Découvrir</h2>
+                <button class="btn btn-success" id="btn-toggle-discover">OFF</button>
+            </div>
+            <div class="input-group">
+                <label for="input-peer-id" style="display:block; font-size:12px; margin-bottom:4px; color:var(--text-secondary); font-weight:600; text-align:left; padding-left:4px;">REJOINDRE UN AMI</label>
+                <input class="input-field" id="input-peer-id" placeholder="Colle l'ID d'un profil ici...">
+            </div>
+            <button class="btn btn-primary" id="btn-connect" style="width:100%; margin-bottom:20px;">🔗 Se connecter</button>
+            <div id="discover-list"></div>
+        </section>
+
+        <!-- Matchs -->
+        <section id="screen-matches" class="screen">
+            <div class="header">
+                <h2>💝 Mes Matchs</h2>
+            </div>
+            <div id="matches-list"></div>
+        </section>
+
+        <!-- Chat overlay -->
+        <div id="chat-overlay" class="chat-overlay">
+            <div class="chat-header">
+                <button class="btn btn-ghost" id="btn-close-chat" style="padding:8px 12px;" aria-label="Retour aux matchs">← Retour</button>
+                <h3 id="chat-peer-name">Chat</h3>
+            </div>
+            <div class="chat-messages" id="chat-messages"></div>
+            <div class="chat-input-bar">
+                <input type="text" id="input-message" placeholder="Écris un message..." maxlength="500" aria-label="Message à envoyer">
+                <button class="btn btn-ghost" id="btn-audio" style="padding:12px; font-size:20px;" aria-label="Enregistrer un message vocal">🎤</button>
+                <button class="btn btn-primary" id="btn-send" style="padding:12px 16px;" aria-label="Envoyer le message">➤</button>
+            </div>
+        </div>
+
+        <!-- Navigation -->
+        <nav>
+            <button class="active" data-screen="profile" aria-label="Profil">👤<small>Profil</small></button>
+            <button data-screen="discover" aria-label="Découvrir">🔍<small>Découvrir</small></button>
+            <button data-screen="matches" aria-label="Matchs">💝<small>Matchs</small></button>
+        </nav>
 <div class="app">
   <header>
     <h1>💫 P2P — WebRTC sans serveur</h1>
@@ -355,6 +436,352 @@
     </div>
   </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gun/sea.js"></script>
+    <script>
+        (function() {
+            // ========== ÉTAT ==========
+            const STATE = {
+                myPeerId: null,
+                pair: null,
+                profile: JSON.parse(localStorage.getItem('p2p_profile') || '{"name":"","bio":"","phone":"","avatar":"😊"}'),
+                isDiscoverable: false,
+                matches: JSON.parse(localStorage.getItem('p2p_matches') || '{}'),
+                messages: JSON.parse(localStorage.getItem('p2p_messages') || '{}'), // Cache local des messages par peerId
+                currentChatPeer: null,
+                gun: null,
+                discoveryNode: 'tinder-p2p-discovery-v4',
+                mediaRecorder: null,
+                audioChunks: []
+            };
+
+            // ========== UTILITAIRES ==========
+            const $ = (s) => document.querySelector(s);
+            const $$ = (s) => document.querySelectorAll(s);
+            const toast = (msg) => {
+                const t = document.createElement('div');
+                t.className = 'toast'; t.setAttribute('role', 'alert');
+                t.textContent = msg;
+                document.body.appendChild(t);
+                setTimeout(() => t.remove(), 3000);
+            };
+            const escapeHtml = (text) => {
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            };
+            const getChatId = (pub1, pub2) => [pub1, pub2].sort().join('_');
+
+            // ========== INITIALISATION GUN ==========
+            async function initGun() {
+                $('#network-status').textContent = '🔵 Connexion au réseau P2P...';
+                $('#display-peer-id').textContent = '⏳ Initialisation...';
+
+                try {
+                    STATE.gun = Gun({
+                        peers: [
+                            'https://gun-manhattan.herokuapp.com/gun',
+                            'https://peer.wall.org/gun',
+                            'https://dletta.herokuapp.com/gun'
+                        ]
+                    });
+
+                    let pair = localStorage.getItem('p2p_keypair');
+                    if (pair) {
+                        STATE.pair = JSON.parse(pair);
+                    } else {
+                        STATE.pair = await SEA.pair();
+                        localStorage.setItem('p2p_keypair', JSON.stringify(STATE.pair));
+                    }
+
+                    STATE.myPeerId = STATE.pair.pub;
+                    $('#display-peer-id').textContent = STATE.myPeerId.substring(0, 15) + '...';
+                    $('#network-status').textContent = '🟢 Connecté (Gun.js)';
+
+                    setupDiscovery();
+                    return STATE.myPeerId;
+                } catch (e) {
+                    console.error("Gun Init Error:", e);
+                    $('#display-peer-id').textContent = '❌ Erreur réseau';
+                    $('#network-status').textContent = '🔴 Échec';
+                }
+            }
+
+            // ========== PROFIL ==========
+            function loadProfileUI() {
+                $('#input-name').value = STATE.profile.name || '';
+                $('#input-bio').value = STATE.profile.bio || '';
+                $('#input-phone').value = STATE.profile.phone || '';
+                $('#profile-avatar').textContent = STATE.profile.avatar || '😊';
+                updateBioCounter();
+            }
+
+            function updateBioCounter() {
+                const len = $('#input-bio').value.length;
+                $('#bio-counter').textContent = `${len}/150`;
+            }
+
+            $('#input-bio').addEventListener('input', updateBioCounter);
+
+            $('#btn-save-profile').addEventListener('click', () => {
+                STATE.profile.name = $('#input-name').value.trim();
+                STATE.profile.bio = $('#input-bio').value.trim();
+                STATE.profile.phone = $('#input-phone').value.trim();
+                if (!STATE.profile.name) return toast('⚠️ Entre un prénom');
+                localStorage.setItem('p2p_profile', JSON.stringify(STATE.profile));
+
+                if (STATE.isDiscoverable) {
+                    broadcastProfile();
+                }
+                toast('✅ Profil sauvegardé');
+            });
+
+            const avatars = ['😊','😎','🥳','🤩','😇','🦊','🐱','🐶','🦄','🐼','🌸','🔥','💎','🍕','🎸','⚽'];
+            $('#btn-change-avatar').addEventListener('click', () => {
+                const idx = avatars.indexOf(STATE.profile.avatar);
+                STATE.profile.avatar = avatars[(idx + 1) % avatars.length];
+                $('#profile-avatar').textContent = STATE.profile.avatar;
+            });
+
+            // ========== DÉCOUVERTE ==========
+            function setupDiscovery() {
+                STATE.gun.get(STATE.discoveryNode).map().on((data, pub) => {
+                    if (pub === STATE.myPeerId || !data) return;
+                    try {
+                        const profile = typeof data.profile === 'string' ? JSON.parse(data.profile) : data.profile;
+                        if (profile && profile.name) {
+                            addOrUpdateDiscover(pub, profile);
+                        }
+                    } catch(e) {}
+                });
+            }
+
+            function broadcastProfile() {
+                if (!STATE.gun) return;
+                if (!STATE.pair) return;
+                STATE.gun.get(STATE.discoveryNode).get(STATE.myPeerId).put({
+                    profile: JSON.stringify(STATE.profile),
+                    updated: Date.now()
+                });
+            }
+
+            $('#btn-toggle-discover').addEventListener('click', () => {
+                STATE.isDiscoverable = !STATE.isDiscoverable;
+                const btn = $('#btn-toggle-discover');
+                btn.textContent = STATE.isDiscoverable ? 'ON' : 'OFF';
+                btn.className = `btn ${STATE.isDiscoverable ? 'btn-success' : ''}`;
+
+                if (STATE.isDiscoverable) {
+                    broadcastProfile();
+                    toast('📡 Tu es visible !');
+                } else {
+                    STATE.gun.get(STATE.discoveryNode).get(STATE.myPeerId).put(null);
+                    toast('🔒 Tu es invisible.');
+                }
+            });
+
+            const discoveredPeers = {};
+            function addOrUpdateDiscover(pub, profile) {
+                if (STATE.matches[pub]) return; // Déjà un match
+                discoveredPeers[pub] = profile;
+                if ($('#screen-discover').classList.contains('active')) {
+                    renderDiscover();
+                }
+            }
+
+            function renderDiscover() {
+                const container = $('#discover-list');
+                const ids = Object.keys(discoveredPeers);
+                if (ids.length === 0) {
+                    container.innerHTML = '<div class="empty-state">🔍 Aucun profil trouvé...</div>';
+                    return;
+                }
+                container.innerHTML = ids.map(id => {
+                    const p = discoveredPeers[id];
+                    return `
+                    <div class="card">
+                        <div class="card-avatar">${p.avatar}</div>
+                        <div class="card-info">
+                            <h3>${p.name}</h3>
+                            <p>${p.bio || 'Pas de bio'}</p>
+                        </div>
+                        <button class="btn btn-primary" data-peer="${id}">💬</button>
+                    </div>`;
+                }).join('');
+                container.querySelectorAll('.btn-primary').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const id = btn.dataset.peer;
+                        addMatch(id, discoveredPeers[id]);
+                        openChat(id);
+                    });
+                });
+            }
+
+            // ========== MATCHS & CHAT ==========
+            function addMatch(peerId, profile) {
+                if (!STATE.matches[peerId]) {
+                    STATE.matches[peerId] = {
+                        name: profile.name,
+                        avatar: profile.avatar,
+                        lastActivity: Date.now()
+                    };
+                    localStorage.setItem('p2p_matches', JSON.stringify(STATE.matches));
+                }
+            }
+
+            function renderMatches() {
+                const container = $('#matches-list');
+                const ids = Object.keys(STATE.matches);
+                if (ids.length === 0) {
+                    container.innerHTML = '<div class="empty-state">💝 Pas encore de matchs.</div>';
+                    return;
+                }
+                container.innerHTML = ids.map(id => {
+                    const m = STATE.matches[id];
+                    return `
+                    <div class="card">
+                        <div class="card-avatar">${m.avatar}</div>
+                        <div class="card-info">
+                            <h3>${m.name}</h3>
+                            <p>Clique pour discuter</p>
+                        </div>
+                        <button class="btn btn-primary" data-peer="${id}">💬</button>
+                    </div>`;
+                }).join('');
+                container.querySelectorAll('.btn-primary').forEach(btn => {
+                    btn.addEventListener('click', () => openChat(btn.dataset.peer));
+                });
+            }
+
+            // REPLACED MESSAGING BLOCK
+            async function openChat(peerId) {
+                STATE.currentChatPeer = peerId;
+                const m = STATE.matches[peerId];
+                $('#chat-peer-name').textContent = m.name;
+                $('#chat-messages').innerHTML = '';
+                const chatId = getChatId(STATE.myPeerId, peerId);
+
+                // Load from memory/cache
+                if (STATE.messages[chatId]) {
+                    STATE.messages[chatId].forEach(msg => displayMessage(msg));
+                } else {
+                    STATE.messages[chatId] = [];
+                }
+
+                $('#chat-overlay').classList.add('active');
+                const container = $('#chat-messages');
+                container.scrollTop = container.scrollHeight;
+
+                // Écoute des messages sur Gun
+                STATE.gun.get('chats').get(chatId).map().on((data, id) => {
+                    if (data && !STATE.messages[chatId].find(m => m._id === id)) {
+                        const msgWithId = { ...data, _id: id };
+                        STATE.messages[chatId].push(msgWithId);
+                        localStorage.setItem('p2p_messages', JSON.stringify(STATE.messages));
+                        displayMessage(msgWithId);
+                    }
+                });
+            }
+
+            function displayMessage(data) {
+                const isMe = data.pub === STATE.myPeerId;
+                const cls = isMe ? 'sent' : 'received';
+                const time = new Date(data.time).toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
+
+                let content = escapeHtml(data.text);
+                if (data.type === 'audio') {
+                    content = `<audio controls src="${data.text}" style="max-width:200px; display:block;"></audio>`;
+                }
+
+                const html = `<div class="message ${cls}">${content}<time>${time}</time></div>`;
+                const container = $('#chat-messages');
+                container.insertAdjacentHTML('beforeend', html);
+                container.scrollTop = container.scrollHeight;
+            }
+            async function sendMessage(text, type = 'text') {
+                if (!text || !STATE.currentChatPeer) return;
+                const chatId = getChatId(STATE.myPeerId, STATE.currentChatPeer);
+                const msg = {
+                    pub: STATE.myPeerId,
+                    text: text,
+                    type: type,
+                    time: Date.now()
+                };
+                try { STATE.gun.get('chats').get(chatId).set(msg); } catch(e) { toast('❌ Erreur d\'envoi'); }
+                $('#input-message').value = '';
+            }
+
+            $('#btn-send').addEventListener('click', () => sendMessage($('#input-message').value.trim()));
+            $('#input-message').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') $('#btn-send').click();
+            });
+
+            $('#btn-close-chat').addEventListener('click', () => {
+                $('#chat-overlay').classList.remove('active');
+                STATE.currentChatPeer = null;
+            });
+
+            // ========== AUDIO ==========
+            $('#btn-audio').addEventListener('click', async () => {
+                if (STATE.mediaRecorder && STATE.mediaRecorder.state === 'recording') {
+                    STATE.mediaRecorder.stop();
+                    $('#btn-audio').textContent = '🎤';
+                    $('#btn-audio').classList.remove('btn-primary');
+                    $('#btn-audio').classList.add('btn-ghost');
+                } else {
+                    try {
+                        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                        STATE.mediaRecorder = new MediaRecorder(stream);
+                        STATE.audioChunks = [];
+                        STATE.mediaRecorder.ondataavailable = e => STATE.audioChunks.push(e.data);
+                        STATE.mediaRecorder.onstop = async () => {
+                            const audioBlob = new Blob(STATE.audioChunks, { type: 'audio/webm' });
+                            const reader = new FileReader();
+                            reader.readAsDataURL(audioBlob);
+                            reader.onloadend = () => sendMessage(reader.result, 'audio');
+                        };
+                        STATE.mediaRecorder.start();
+                        $('#btn-audio').textContent = '🛑';
+                        $('#btn-audio').classList.remove('btn-ghost');
+                        $('#btn-audio').classList.add('btn-primary');
+                    } catch(e) {
+                        toast('❌ Micro non autorisé');
+                    }
+                }
+            });
+
+            // ========== NAVIGATION ==========
+            $$('nav button').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const screen = btn.dataset.screen;
+                    $$('nav button').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    $$('.screen').forEach(s => s.classList.remove('active'));
+                    $(`#screen-${screen}`).classList.add('active');
+                    if (screen === 'matches') renderMatches();
+                    if (screen === 'discover') renderDiscover();
+                });
+            });
+
+            // ========== REGENERATE ID ==========
+            $('#btn-regenerate-id').addEventListener('click', async () => {
+                if (confirm('Régénérer ton identité ? Tes matchs seront perdus.')) {
+                    localStorage.clear();
+                    location.reload();
+                }
+            });
+
+            $('#btn-copy-id').addEventListener('click', () => {
+                navigator.clipboard.writeText(STATE.myPeerId).then(() => toast('📋 ID copié'));
+            });
+
+            // ========== DÉMARRAGE ==========
+            updateBioCounter();
+            loadProfileUI();
+            initGun();
+            renderMatches();
+        })();
+    </script>
   <!-- CONNECTED: Chat -->
   <div class="card chat-section" id="chat-section">
     <h2>💬 Canal P2P — chiffré DTLS</h2>
