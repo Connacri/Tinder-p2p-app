@@ -1,6 +1,9 @@
 # Bubblewrap / TWA
 *.keystore
 *.jks
+release.keystore
+# ⚠️ NE JAMAIS COMMITTER — utiliser GitHub Secrets à la place
+keystore-base64.txt
 app-release-unsigned.apk
 app-release-signed.apk
 .aab
